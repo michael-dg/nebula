@@ -707,7 +707,7 @@ fn tab_strip<'a>(
         let mut style = Style::default().fg(th.dim);
         if i == active {
             style = Style::default()
-                .fg(th.accent)
+                .fg(th.lit())
                 .bg(th.sel_bg)
                 .add_modifier(Modifier::BOLD);
             if on_tabs {
@@ -1899,10 +1899,7 @@ fn draw_key_combo(f: &mut Frame, app: &App, area: Rect) {
         ..area
     };
     let th = app.chrome.theme;
-    let cap = Style::default()
-        .fg(th.accent)
-        .bg(th.sel_bg)
-        .add_modifier(Modifier::BOLD);
+    let cap = th.selected(Style::default().fg(th.accent), true);
     let mut spans = vec![Span::raw(" ")];
     for (i, key) in combo.keys.iter().enumerate() {
         if i > 0 {

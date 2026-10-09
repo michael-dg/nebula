@@ -579,7 +579,7 @@ fn project_chip(
         }
     };
     let mut name = if tab.active {
-        Style::default().fg(th.accent).add_modifier(Modifier::BOLD)
+        Style::default().fg(th.lit()).add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(th.muted)
     };
@@ -5532,6 +5532,38 @@ mod tests {
             draw(&app, false).cell((20, 2)).unwrap().bg,
             dim_toward_black(th.warn, TINT_PEAK * 0.6)
         );
+    }
+
+    /// The lit PROJECT TAB sits on the raised gray with its name in the
+    /// accent — in the terminal's own text in the `terminal` theme, whose
+    /// gray and blue can be two tones of one hue.
+    #[test]
+    fn the_lit_project_tab_names_itself_in_the_text_color_in_the_terminal_theme() {
+        let tab = crate::launcher::ProjectTab {
+            id: nebula_core::ProjectId("p1".into()),
+            name: "spinach-butter".into(),
+            tally: crate::launcher::Tally::default(),
+            active: true,
+            focused: false,
+            drop: false,
+        };
+        for name in crate::theme::THEMES {
+            let th = Theme::by_name(name);
+            let [label, _] = project_chip(&tab, PROJECT_TAB_MAX, None, None, th);
+            let style = label
+                .spans
+                .iter()
+                .find(|s| s.content.contains("spinach"))
+                .expect("the name span")
+                .style;
+            assert_eq!(style.bg, Some(th.sel_bg), "{name}");
+            let want = if *name == "terminal" {
+                th.text
+            } else {
+                th.accent
+            };
+            assert_eq!(style.fg, Some(want), "{name}");
+        }
     }
 
     /// The `terminal` theme paints no fill on the cursor's card — no wash,

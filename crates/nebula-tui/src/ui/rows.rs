@@ -2,7 +2,7 @@
 
 use nebula_core::AgentStatus;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
@@ -66,10 +66,8 @@ fn selection_mark(mark: Color, th: Theme) -> Color {
 
 /// Base style for a whole list row.
 fn row_bar(selected: bool, focused: bool, th: Theme) -> Style {
-    if selected && focused {
-        Style::default().bg(th.sel_bg).add_modifier(Modifier::BOLD)
-    } else if selected {
-        Style::default().bg(th.sel_bg_dim)
+    if selected {
+        th.selected(Style::default(), focused)
     } else {
         Style::default()
     }
