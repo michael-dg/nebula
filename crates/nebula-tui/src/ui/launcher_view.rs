@@ -602,8 +602,12 @@ fn project_chip(
     } else {
         (fill(Style::default()), fill(name))
     };
+    // Reverse video turns a sweep's colored letters into colored blocks,
+    // so the lit tab of a `palette_only` theme holds still; its dots, just
+    // after, still say what is going on.
+    let reversed = tab.active && th.palette_only;
     let (ramp, phase) = match sweep {
-        Some(phase) if !tab.focused => (tab_ramp(tab.tally, th), phase),
+        Some(phase) if !tab.focused && !reversed => (tab_ramp(tab.tally, th), phase),
         _ => (None, 0),
     };
     let mut label = vec![Span::styled(" ", pad)];
@@ -616,7 +620,12 @@ fn project_chip(
     label.extend(
         tab_dots(tab.tally, th)
             .into_iter()
-            .map(|dot| Span::styled(dot.content, fill(dot.style))),
+            // Outside the reverse-video block in a `palette_only` theme:
+            // inside it, a dot's color would become its background.
+            .map(|dot| {
+                let style = if reversed { dot.style } else { fill(dot.style) };
+                Span::styled(dot.content, style)
+            }),
     );
     let cross = if hover == Some(&HitTarget::LauncherTabClose(tab.id.clone())) {
         th.err
@@ -5573,6 +5582,30 @@ mod tests {
         assert_eq!(style.bg, None, "no gray slab");
         assert_eq!(style.fg, None, "the terminal's own text, swapped");
         assert!(style.add_modifier.contains(Modifier::REVERSED));
+
+        // A busy project: the sweep would turn its letters into colored
+        // blocks under reverse video, so the lit tab holds still, and its
+        // dot keeps its own color outside the block.
+        let busy = crate::launcher::ProjectTab {
+            tally: crate::launcher::Tally {
+                running: 1,
+                ..crate::launcher::Tally::default()
+            },
+            ..tab.clone()
+        };
+        let th = Theme::by_name("terminal");
+        for phase in 0..12 {
+            let [label, _] = project_chip(&busy, PROJECT_TAB_MAX, None, Some(phase), th);
+            for span in &label.spans {
+                let reversed = span.style.add_modifier.contains(Modifier::REVERSED);
+                if span.content.contains('●') {
+                    assert!(!reversed, "phase {phase}: the dot sits outside the block");
+                } else if !span.content.trim().is_empty() {
+                    assert!(reversed, "phase {phase}: {:?} left the block", span.content);
+                    assert_eq!(span.style.fg, None, "phase {phase}: no sweep color");
+                }
+            }
+        }
     }
 
     /// The `terminal` theme paints no fill on the cursor's card — no wash,
