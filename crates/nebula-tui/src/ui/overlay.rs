@@ -208,7 +208,7 @@ fn draw_menu_overlay(f: &mut Frame, app: &mut App, menu: crate::app::ContextMenu
             Style::default()
         };
         if i == menu.hover {
-            style = style.bg(th.sel_bg).add_modifier(Modifier::BOLD);
+            style = th.selected(style, true);
         }
         let text = if item.action.submenu().is_some() {
             format!(" {:<label_w$} ▸ ", item.label)
@@ -898,13 +898,13 @@ fn append_setting_value_row(
     let mut label_style = Style::default();
     let mut value_style = Style::default().fg(th.accent);
     if selected {
-        label_style = label_style.bg(th.sel_bg).add_modifier(Modifier::BOLD);
-        value_style = value_style.bg(th.sel_bg).add_modifier(Modifier::BOLD);
+        label_style = th.selected(label_style, true);
+        value_style = th.selected(value_style, true);
     }
     let room = (inner.width as usize).saturating_sub(3 + label_w + 2);
     let mut prefix_style = Style::default().fg(th.ok);
     if selected {
-        prefix_style = prefix_style.bg(th.sel_bg).add_modifier(Modifier::BOLD);
+        prefix_style = th.selected(prefix_style, true);
     }
     let label_room = label_w - prefix.len();
     lines.push(Line::from(vec![
@@ -938,8 +938,8 @@ fn append_hotkey_row(
         th.warn
     });
     if selected {
-        label_style = label_style.bg(th.sel_bg).add_modifier(Modifier::BOLD);
-        value_style = value_style.bg(th.sel_bg).add_modifier(Modifier::BOLD);
+        label_style = th.selected(label_style, true);
+        value_style = th.selected(value_style, true);
     }
     let flag = match (ambiguous, reach) {
         (true, _) | (_, crate::keymap::Reach::Blocked) => "✗",
@@ -1186,7 +1186,7 @@ fn draw_metrics_overlay(f: &mut Frame, app: &mut App, view: crate::app::MetricsV
             };
             let sel = |s: Style| {
                 if i == selected {
-                    s.bg(th.sel_bg).add_modifier(Modifier::BOLD)
+                    th.selected(s, true)
                 } else {
                     s
                 }

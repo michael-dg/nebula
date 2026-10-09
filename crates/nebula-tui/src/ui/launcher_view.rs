@@ -571,14 +571,22 @@ fn project_chip(
     sweep: Option<usize>,
     th: Theme,
 ) -> [PaneTab; 2] {
+    // The lit tab sits on the raised gray, its name in the accent — or,
+    // in a `palette_only` theme, in reverse video on the terminal's own
+    // colors: the palette's gray and accent can be two tones of one hue,
+    // too close to read one on the other.
     let fill = |style: Style| {
-        if tab.active {
-            style.bg(th.sel_bg)
-        } else {
+        if !tab.active {
             style
+        } else if th.palette_only {
+            th.selected(style, true)
+        } else {
+            style.bg(th.sel_bg)
         }
     };
-    let mut name = if tab.active {
+    let mut name = if tab.active && th.palette_only {
+        Style::default().add_modifier(Modifier::BOLD)
+    } else if tab.active {
         Style::default().fg(th.accent).add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(th.muted)
@@ -5532,6 +5540,39 @@ mod tests {
             draw(&app, false).cell((20, 2)).unwrap().bg,
             dim_toward_black(th.warn, TINT_PEAK * 0.6)
         );
+    }
+
+    /// The lit PROJECT TAB: on the raised gray with its name in the accent
+    /// in a shaded preset; reverse video on the terminal's own colors in the
+    /// `terminal` theme, whose gray and accent can be two tones of one hue.
+    #[test]
+    fn the_lit_project_tab_is_reverse_video_in_the_terminal_theme() {
+        let tab = crate::launcher::ProjectTab {
+            id: nebula_core::ProjectId("p1".into()),
+            name: "spinach-butter".into(),
+            tally: crate::launcher::Tally::default(),
+            active: true,
+            focused: false,
+            drop: false,
+        };
+        let name_style = |th: Theme| {
+            let [label, _] = project_chip(&tab, PROJECT_TAB_MAX, None, None, th);
+            label
+                .spans
+                .iter()
+                .find(|s| s.content.contains("spinach"))
+                .expect("the name span")
+                .style
+        };
+        let shaded = Theme::by_name("default");
+        let style = name_style(shaded);
+        assert_eq!(style.bg, Some(shaded.sel_bg));
+        assert_eq!(style.fg, Some(shaded.accent));
+
+        let style = name_style(Theme::by_name("terminal"));
+        assert_eq!(style.bg, None, "no gray slab");
+        assert_eq!(style.fg, None, "the terminal's own text, swapped");
+        assert!(style.add_modifier.contains(Modifier::REVERSED));
     }
 
     /// The `terminal` theme paints no fill on the cursor's card — no wash,

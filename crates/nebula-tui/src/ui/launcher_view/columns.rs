@@ -366,13 +366,16 @@ fn draw_row(
         ..area
     };
     if selected {
-        let bg = if app.nav.focus == hit_focus(&hit) {
-            app.chrome.theme.sel_bg
+        let th = app.chrome.theme;
+        let focused = app.nav.focus == hit_focus(&hit);
+        if th.palette_only {
+            f.buffer_mut()
+                .set_style(rect, th.selected(Style::default(), focused));
         } else {
-            app.chrome.theme.sel_bg_dim
-        };
-        for x in rect.x..rect.right() {
-            f.buffer_mut()[(x, rect.y)].set_bg(bg);
+            let bg = if focused { th.sel_bg } else { th.sel_bg_dim };
+            for x in rect.x..rect.right() {
+                f.buffer_mut()[(x, rect.y)].set_bg(bg);
+            }
         }
     }
     app.chrome.hits.push((rect, hit));

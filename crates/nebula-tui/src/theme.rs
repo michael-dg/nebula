@@ -15,7 +15,7 @@
 //! The terminal's theme then decides every color nebula draws, the way
 //! it does for tmux — on a black, a navy or a white window alike.
 
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier, Style};
 
 /// What the BLACK BACKGROUND setting paints under every cell nothing else
 /// colored. Truecolor rather than ANSI `Black`, which a terminal palette is
@@ -129,6 +129,26 @@ pub struct Theme {
     /// cursor's card still wears its thick accent frame. True for the
     /// `terminal` preset only.
     pub palette_only: bool,
+}
+
+impl Theme {
+    /// A selected row's or chip's look on top of `style`: the raised gray
+    /// and bold where the keys are (`focused`), the dimmer gray elsewhere.
+    /// A `palette_only` preset has no gray of its own to raise a row with
+    /// — its blacks and grays are whatever the terminal's palette makes of
+    /// them, often the background itself or a full-strength tone — so its
+    /// selection is reverse video instead: the terminal swaps its own
+    /// foreground and background, which every palette keeps readable
+    /// (Grok's terminal theme selects the same way). Bold alone marks it
+    /// where the keys are not.
+    pub fn selected(self, style: Style, focused: bool) -> Style {
+        match (self.palette_only, focused) {
+            (true, true) => style.add_modifier(Modifier::REVERSED | Modifier::BOLD),
+            (true, false) => style.add_modifier(Modifier::BOLD),
+            (false, true) => style.bg(self.sel_bg).add_modifier(Modifier::BOLD),
+            (false, false) => style.bg(self.sel_bg_dim),
+        }
+    }
 }
 
 /// `done` and its sweep for a preset that already owns blue.
@@ -645,5 +665,32 @@ mod tests {
                 "{name}: shades its own fills"
             );
         }
+    }
+
+    /// `selected` is the raised gray every preset already drew — bold where
+    /// the keys are, the dimmer gray elsewhere — and reverse video in the
+    /// `terminal` preset, which has no gray of its own to raise a row with.
+    #[test]
+    fn a_selection_is_the_raised_gray_or_reverse_video_in_the_terminal_preset() {
+        let base = Style::default().fg(Color::Red);
+        for name in THEMES.iter().filter(|n| **n != "terminal") {
+            let th = Theme::by_name(name);
+            assert_eq!(
+                th.selected(base, true),
+                base.bg(th.sel_bg).add_modifier(Modifier::BOLD),
+                "{name}"
+            );
+            assert_eq!(th.selected(base, false), base.bg(th.sel_bg_dim), "{name}");
+        }
+        let th = Theme::by_name("terminal");
+        let focused = th.selected(base, true);
+        assert_eq!(focused.bg, None, "no fill of ours");
+        assert!(focused
+            .add_modifier
+            .contains(Modifier::REVERSED | Modifier::BOLD));
+        let away = th.selected(base, false);
+        assert_eq!(away.bg, None);
+        assert!(away.add_modifier.contains(Modifier::BOLD));
+        assert!(!away.add_modifier.contains(Modifier::REVERSED));
     }
 }

@@ -706,13 +706,29 @@ fn tab_strip<'a>(
         let label = format!(" {t} ");
         let mut style = Style::default().fg(th.dim);
         if i == active {
-            style = Style::default()
-                .fg(th.accent)
-                .bg(th.sel_bg)
-                .add_modifier(Modifier::BOLD);
-            if on_tabs {
-                style = style.add_modifier(Modifier::REVERSED);
-            }
+            style = if th.palette_only {
+                // Reverse video already means "selected" in this theme,
+                // so the tab the keys are on takes the accent block the
+                // header's cursor wears.
+                if on_tabs {
+                    Style::default()
+                        .bg(th.accent)
+                        .fg(th.on_accent)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    th.selected(Style::default(), true)
+                }
+            } else {
+                let lit = Style::default()
+                    .fg(th.accent)
+                    .bg(th.sel_bg)
+                    .add_modifier(Modifier::BOLD);
+                if on_tabs {
+                    lit.add_modifier(Modifier::REVERSED)
+                } else {
+                    lit
+                }
+            };
         }
         let w = label.chars().count() as u16;
         hits.push((x, x + w));
@@ -1887,10 +1903,7 @@ fn draw_key_combo(f: &mut Frame, app: &App, area: Rect) {
         ..area
     };
     let th = app.chrome.theme;
-    let cap = Style::default()
-        .fg(th.accent)
-        .bg(th.sel_bg)
-        .add_modifier(Modifier::BOLD);
+    let cap = th.selected(Style::default().fg(th.accent), true);
     let mut spans = vec![Span::raw(" ")];
     for (i, key) in combo.keys.iter().enumerate() {
         if i > 0 {
