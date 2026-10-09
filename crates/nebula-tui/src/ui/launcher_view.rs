@@ -2060,7 +2060,13 @@ fn selected_card_block(
         .borders(Borders::ALL)
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(th.accent));
-    let fill = if app.launcher.highlight_current_card {
+    // A `palette_only` theme leaves the card on the terminal's own
+    // background: no wash, and no gray slab the size of a card — the thick
+    // accent frame alone says where the cursor is, as tmux's active pane
+    // border does.
+    let fill = if th.palette_only {
+        Color::Reset
+    } else if app.launcher.highlight_current_card {
         card_tint(app, status, th)
     } else if focused {
         th.sel_bg
@@ -5526,6 +5532,64 @@ mod tests {
             draw(&app, false).cell((20, 2)).unwrap().bg,
             dim_toward_black(th.warn, TINT_PEAK * 0.6)
         );
+    }
+
+    /// The `terminal` theme paints no fill on the cursor's card — no wash,
+    /// no gray — with HIGHLIGHT CURRENT CARD on or off, focused or not: the
+    /// card stays on the terminal's own background, and its thick frame in
+    /// the palette's accent is what marks it.
+    #[test]
+    fn the_terminal_theme_leaves_the_cursors_card_on_the_terminal_background() {
+        use nebula_core::{Agent, AgentId, AgentKind, AgentStatus, WorktreeId};
+        let row = LauncherRow {
+            agent: Agent {
+                id: AgentId("a1".into()),
+                worktree_id: WorktreeId("w1".into()),
+                name: "fix login".into(),
+                status: AgentStatus::Running,
+                archived: false,
+                archived_at: 0,
+                unseen: false,
+                kind: AgentKind::Claude,
+                custom_harness: None,
+                model: None,
+                effort: None,
+                session_id: None,
+                cloud_session_id: None,
+                sort_order: 0,
+                status_changed_at: 0,
+                alive: true,
+                issue_url: None,
+                recent_prompts: Vec::new(),
+                role: nebula_core::AgentRole::Worker,
+            },
+            project: "nebula".into(),
+            branch: "feat-x".into(),
+            pr: None,
+        };
+        let th = Theme::by_name("terminal");
+        let mut app = App::new();
+        app.chrome.theme = th;
+        for highlight in [false, true] {
+            app.launcher.highlight_current_card = highlight;
+            for (focus, focused) in [(Focus::Terminal, false), (Focus::Sessions, true)] {
+                app.nav.focus = focus;
+                let area = Rect::new(0, 0, 40, crate::launcher::CARD_H);
+                let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(
+                    area.width,
+                    area.height,
+                ))
+                .unwrap();
+                terminal
+                    .draw(|f| draw_one(f, &app, area, &row, true, focused, th))
+                    .unwrap();
+                let buf = terminal.backend().buffer().clone();
+                let what = format!("highlight {highlight}, focused {focused}");
+                assert_eq!(buf.cell((20, 2)).unwrap().bg, Color::Reset, "{what}");
+                assert_eq!(buf.cell((0, 0)).unwrap().fg, th.accent, "{what}: the frame");
+                assert_eq!(buf.cell((0, 0)).unwrap().symbol(), "┏", "{what}: thick");
+            }
+        }
     }
 
     /// CARD LINE COUNTS: the lines behind the file count always follow it

@@ -8,6 +8,12 @@
 //! accent that the 256 palette simply doesn't have (its darkest chromatic
 //! steps start around 40%), so it's truecolor RGB — supported by modern
 //! terminals including Terminal.app since macOS Tahoe.
+//!
+//! The `terminal` preset is the other way round: every role is one of the
+//! sixteen named ANSI colors or the terminal's own foreground and
+//! background, and nothing is shaded from them (`Theme::palette_only`).
+//! The terminal's theme then decides every color nebula draws, the way
+//! it does for tmux — on a black, a navy or a white window alike.
 
 use ratatui::style::Color;
 
@@ -21,6 +27,7 @@ pub const BLACK_BACKGROUND: Color = Color::Rgb(0, 0, 0);
 /// case-insensitively and falls back to the first entry.
 pub const THEMES: &[&str] = &[
     "default", "ocean", "forest", "rose", "amber", "lavender", "coral", "slate", "sand", "mono",
+    "terminal",
 ];
 
 /// Semantic color roles for the whole TUI.
@@ -111,8 +118,17 @@ pub struct Theme {
     /// the one gray). On a black window it reads as the accent glowing
     /// faintly rather than as a gray slab, and it is darker than the gray
     /// it replaced, so dim text on it keeps more of its contrast.
-    /// Truecolor by necessity (see module docs).
+    /// Truecolor by necessity (see module docs). `Reset` — the terminal's
+    /// own background, so no fill — in a `palette_only` preset.
     pub focus_tint: Color,
+    /// Every cell keeps to the terminal's own palette: no role is shaded
+    /// into a truecolor fill of nebula's making — the focus tint, a
+    /// selected card's wash (HIGHLIGHT CURRENT CARD), the NESTED layout's
+    /// row fill and grays all stay off — so a terminal theme that is not
+    /// black (a navy, a white) never meets a fill computed for black. The
+    /// cursor's card still wears its thick accent frame. True for the
+    /// `terminal` preset only.
+    pub palette_only: bool,
 }
 
 /// `done` and its sweep for a preset that already owns blue.
@@ -153,6 +169,7 @@ impl Default for Theme {
             ],
             done_sweep: [Color::Indexed(75), Color::Indexed(111), Color::Indexed(153)],
             focus_tint: Color::Rgb(0, 27, 28),
+            palette_only: false,
         }
     }
 }
@@ -245,6 +262,44 @@ impl Theme {
                 focus_tint: Color::Rgb(22, 22, 22),
                 ..base
             },
+            "terminal" => Self {
+                // The terminal's own palette and nothing else: named ANSI
+                // colors, which a terminal theme redefines, and its default
+                // foreground and background. Blue is the accent, as in the
+                // tmux and herdr defaults most terminal themes are tuned
+                // for; the title chip on it is ANSI black, as tmux's
+                // `fg=black,bg=blue` status is.
+                accent: Color::Blue,
+                on_accent: Color::Black,
+                text: Color::Reset,
+                muted: Color::Gray,
+                dim: Color::DarkGray,
+                ok: Color::Green,
+                // Sky blue elsewhere: the light blue a step off the accent.
+                done: Color::LightBlue,
+                warn: Color::Yellow,
+                err: Color::Red,
+                special: Color::LightMagenta,
+                // Purple everywhere else: the palette's own magenta here.
+                merged: Color::Magenta,
+                root: Color::LightYellow,
+                worktree: Color::Cyan,
+                // A raised row is the palette's gray (bright black), and an
+                // unfocused one its black — a step off the background in
+                // most dark themes, and the terminal's choice either way.
+                sel_bg: Color::DarkGray,
+                sel_bg_dim: Color::Black,
+                edge: Color::DarkGray,
+                // Two shades per hue is all sixteen colors hold, so each
+                // sweep heads into white — done's into its own blues
+                // instead, the one sweep that must share no shade.
+                warn_sweep: [Color::Yellow, Color::LightYellow, Color::White],
+                err_sweep: [Color::Red, Color::LightRed, Color::White],
+                merged_sweep: [Color::Magenta, Color::LightMagenta, Color::White],
+                done_sweep: [Color::LightBlue, Color::Cyan, Color::LightCyan],
+                focus_tint: Color::Reset,
+                palette_only: true,
+            },
             _ => base,
         }
     }
@@ -268,6 +323,34 @@ pub mod nested {
     /// How much of the accent the cursor's row keeps as its fill: the
     /// accent taken nearly to black, so the row is washed in it.
     pub const SELECTED_FILL: f32 = 0.18;
+
+    /// [`BRIGHT`], or the theme's text in a `palette_only` preset.
+    pub fn bright(th: &super::Theme) -> Color {
+        if th.palette_only {
+            th.text
+        } else {
+            BRIGHT
+        }
+    }
+
+    /// [`DIM`], or the theme's dim in a `palette_only` preset.
+    pub fn dim(th: &super::Theme) -> Color {
+        if th.palette_only {
+            th.dim
+        } else {
+            DIM
+        }
+    }
+
+    /// [`LINK`], or the theme's blue (its `done`) in a `palette_only`
+    /// preset.
+    pub fn link(th: &super::Theme) -> Color {
+        if th.palette_only {
+            th.done
+        } else {
+            LINK
+        }
+    }
 }
 
 #[cfg(test)]
@@ -437,7 +520,12 @@ mod tests {
     fn merged_is_purple_and_its_own_color_in_every_preset() {
         for name in THEMES {
             let th = Theme::by_name(name);
-            assert_eq!(th.merged, Color::Indexed(135), "{name}: merged is purple");
+            let purple = if th.palette_only {
+                Color::Magenta
+            } else {
+                Color::Indexed(135)
+            };
+            assert_eq!(th.merged, purple, "{name}: merged is purple");
             assert_ne!(th.merged, th.special, "{name}: merged reads as terminated");
             assert_ne!(th.merged, th.done, "{name}: merged reads as unread done");
             assert_ne!(th.merged, th.ok, "{name}: merged reads as plain success");
@@ -484,6 +572,10 @@ mod tests {
         };
         for name in THEMES {
             let th = Theme::by_name(name);
+            if th.palette_only {
+                assert_eq!(th.focus_tint, Color::Reset, "{name}: no tint of ours");
+                continue;
+            }
             let Color::Rgb(r, g, b) = th.focus_tint else {
                 panic!("{name}: focus_tint must be truecolor RGB");
             };
@@ -507,6 +599,51 @@ mod tests {
                     (r, g, b)
                 );
             }
+        }
+    }
+
+    /// The `terminal` preset draws nothing the terminal's theme does not
+    /// define: every role is a named ANSI color or the terminal's default
+    /// (`Reset`) — no 256-color index, no truecolor — and it is the one
+    /// preset that says so.
+    #[test]
+    fn the_terminal_preset_uses_only_the_terminal_palette() {
+        let th = Theme::by_name("terminal");
+        assert!(th.palette_only);
+        let named = |c: Color| !matches!(c, Color::Rgb(..) | Color::Indexed(_));
+        let roles = [
+            ("accent", th.accent),
+            ("on_accent", th.on_accent),
+            ("text", th.text),
+            ("muted", th.muted),
+            ("dim", th.dim),
+            ("ok", th.ok),
+            ("done", th.done),
+            ("warn", th.warn),
+            ("err", th.err),
+            ("special", th.special),
+            ("merged", th.merged),
+            ("root", th.root),
+            ("worktree", th.worktree),
+            ("sel_bg", th.sel_bg),
+            ("sel_bg_dim", th.sel_bg_dim),
+            ("edge", th.edge),
+            ("focus_tint", th.focus_tint),
+        ];
+        for (role, color) in roles {
+            assert!(
+                named(color),
+                "terminal: {role} is {color:?}, not the palette's"
+            );
+        }
+        for sweep in [th.warn_sweep, th.err_sweep, th.merged_sweep, th.done_sweep] {
+            assert!(sweep.iter().all(|c| named(*c)), "terminal: {sweep:?}");
+        }
+        for name in THEMES.iter().filter(|n| **n != "terminal") {
+            assert!(
+                !Theme::by_name(name).palette_only,
+                "{name}: shades its own fills"
+            );
         }
     }
 }
