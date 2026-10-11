@@ -617,6 +617,12 @@ fn project_chip(
         ramp,
         phase,
     ));
+    // In a `palette_only` theme the block is the name alone, padded on
+    // both sides: the dots and the cross after it keep the terminal's own
+    // background, so the block never breaks around them.
+    if reversed {
+        label.push(Span::styled(" ", pad));
+    }
     label.extend(
         tab_dots(tab.tally, th)
             .into_iter()
@@ -640,7 +646,14 @@ fn project_chip(
             hit: Some(HitTarget::LauncherTab(tab.id.clone())),
         },
         PaneTab {
-            spans: vec![Span::styled(" × ", fill(Style::default().fg(cross)))],
+            spans: vec![Span::styled(
+                " × ",
+                if reversed {
+                    Style::default().fg(cross)
+                } else {
+                    fill(Style::default().fg(cross))
+                },
+            )],
             hit: Some(HitTarget::LauncherTabClose(tab.id.clone())),
         },
     ]
@@ -5585,7 +5598,7 @@ mod tests {
 
         // A busy project: the sweep would turn its letters into colored
         // blocks under reverse video, so the lit tab holds still, and its
-        // dot keeps its own color outside the block.
+        // dot and the cross keep their own colors outside the block.
         let busy = crate::launcher::ProjectTab {
             tally: crate::launcher::Tally {
                 running: 1,
@@ -5595,7 +5608,12 @@ mod tests {
         };
         let th = Theme::by_name("terminal");
         for phase in 0..12 {
-            let [label, _] = project_chip(&busy, PROJECT_TAB_MAX, None, Some(phase), th);
+            let [label, cross] = project_chip(&busy, PROJECT_TAB_MAX, None, Some(phase), th);
+            let cross = &cross.spans[0].style;
+            assert!(
+                !cross.add_modifier.contains(Modifier::REVERSED),
+                "phase {phase}: the cross sits outside the block"
+            );
             for span in &label.spans {
                 let reversed = span.style.add_modifier.contains(Modifier::REVERSED);
                 if span.content.contains('●') {
