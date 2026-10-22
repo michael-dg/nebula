@@ -6,7 +6,7 @@
 > |---|---|---|
 > | [`terminal-theme`](https://github.com/michael-dg/nebula/compare/main...terminal-theme) | A theme drawn with the terminal's own palette | Fork only, until it is polished ([upstream #167](https://github.com/AgentSystemLabs/nebula/issues/167)) |
 > | [`github-html`](https://github.com/michael-dg/nebula/pull/7) | Bot comments on issues and PRs render the HTML tags GitHub uses instead of showing them raw | In review on the fork ([upstream #169](https://github.com/AgentSystemLabs/nebula/issues/169)) |
-> | [`ui-state-autosave`](https://github.com/michael-dg/nebula/pull/8) | Project tabs and layout are saved a second after each change, not only on `q` | In review on the fork |
+> | [`ui-state-autosave`](https://github.com/AgentSystemLabs/nebula/pull/191) | Project tabs and layout are saved a second after each change, not only on `q` | Upstream [PR #191](https://github.com/AgentSystemLabs/nebula/pull/191) ([issue #190](https://github.com/AgentSystemLabs/nebula/issues/190)) |
 >
 > Everything below is upstream's README, unchanged.
 
