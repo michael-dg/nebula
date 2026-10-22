@@ -1,3 +1,15 @@
+> [!NOTE]
+> **This is a fork: michael-dg/nebula.** Its `main` is upstream [AgentSystemLabs/nebula](https://github.com/AgentSystemLabs/nebula) plus this note.
+> The build in daily use here is upstream **v0.45.0** with these layers on top, each on its own branch:
+>
+> | Layer | What it adds | Status |
+> |---|---|---|
+> | [`terminal-theme`](https://github.com/michael-dg/nebula/compare/main...terminal-theme) | A theme drawn with the terminal's own palette | Fork only, until it is polished ([upstream #167](https://github.com/AgentSystemLabs/nebula/issues/167)) |
+> | [`github-html`](https://github.com/michael-dg/nebula/pull/7) | Bot comments on issues and PRs render the HTML tags GitHub uses instead of showing them raw | In review on the fork ([upstream #169](https://github.com/AgentSystemLabs/nebula/issues/169)) |
+> | [`ui-state-autosave`](https://github.com/michael-dg/nebula/pull/8) | Project tabs and layout are saved a second after each change, not only on `q` | In review on the fork |
+>
+> Everything below is upstream's README, unchanged.
+
 > [!WARNING]
 > **Work in progress.** nebula is built for one person's workflow — mine — and it changes fast as I iterate on it.
 > Expect breaking changes between releases: keys that move, screens that get redrawn, features that come and go
