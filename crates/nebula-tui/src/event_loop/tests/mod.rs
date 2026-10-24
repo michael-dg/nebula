@@ -22617,3 +22617,11 @@ fn a_held_attach_goes_out_after_a_frame_with_no_pane() {
         "{out:?}"
     );
 }
+
+#[test]
+fn f10_without_an_orchestrator_view_flashes_instead_of_panicking() {
+    let mut app = App::new();
+    let mut out = Vec::new();
+    press(&mut app, KeyCode::F(10), KeyModifiers::NONE, &mut out);
+    assert!(app.chrome.flash.is_some(), "says why nothing happened");
+}

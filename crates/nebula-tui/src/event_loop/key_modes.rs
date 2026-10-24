@@ -660,6 +660,11 @@ fn handle_tool_action(app: &mut App, action: crate::keymap::Action, out: &mut Ve
         Action::NewTerminal => create_terminal_for_context(app, out),
         // Terminal-scope only; never resolved here.
         Action::UnlockTerminal => {}
+        // Bound (F10) but the view itself has no TUI yet; say so rather
+        // than fall through to the unreachable arm below.
+        Action::ToggleOrchestratorView => {
+            app.chrome.flash = Some("the orchestrator view isn't available yet".into());
+        }
         _ => unreachable!("global action dispatcher passed the wrong action"),
     }
 }
