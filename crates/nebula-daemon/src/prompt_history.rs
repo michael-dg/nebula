@@ -24,7 +24,6 @@ use std::sync::Arc;
 use nebula_core::{AgentId, PromptEntry};
 
 use crate::registry::Daemon;
-use crate::status::HookEvent;
 
 /// The longest condensed prompt the store keeps. The SESSIONS PANEL shows
 /// far less, but a wider terminal or a later reader should see the whole
@@ -100,27 +99,16 @@ impl Daemon {
     }
 
     /// Empty the session's history and push the row to every subscriber —
-    /// the session was cleared, so the prompts it held describe a
-    /// conversation that is gone. A missing row is silently nothing.
-    pub fn clear_prompts(self: &Arc<Self>, id: &AgentId) {
+    /// the CLI started a new conversation (`Effect::ConversationChanged`),
+    /// so the prompts it held describe one that is gone. A missing row is
+    /// silently nothing.
+    pub fn clear_prompts(&self, id: &AgentId) {
         match self.store.clear_prompts(id) {
             Ok(true) => self.try_broadcast_agent(id),
             Ok(false) => {}
             Err(e) => tracing::warn!(agent = %id, error = %e, "prompts not cleared"),
         }
     }
-}
-
-/// Whether a hook event starts the session over in place, so its RECENT
-/// PROMPTS no longer apply. Claude and Codex report `/clear` as a
-/// `SessionStart` with source `clear`; pi reports `/new` as reason `new`,
-/// which its extension forwards as the source. Every other start
-/// (`startup`, `resume`, `compact`, `fork`, `reload`) keeps the history.
-pub fn clears_prompts(event: &HookEvent) -> bool {
-    matches!(
-        event,
-        HookEvent::SessionStart { source: Some(s) } if s == "clear" || s == "new"
-    )
 }
 
 #[cfg(test)]
@@ -311,20 +299,40 @@ mod tests {
         assert!(events.try_recv().is_err(), "an unknown id is silent");
     }
 
-    /// Only a start over in place drops the history: Claude's and Codex's
-    /// `clear`, pi's `new`. Starting, resuming, compacting, forking or
-    /// reloading keep it, and so does a start with no source (Cursor).
+    /// The hook path end to end: a prompt under one conversation, then
+    /// the next one under a new id — Cursor after `/clear`, OpenCode after
+    /// `/new` — leaves only the new prompt; a `SessionStart` that keeps the
+    /// id (`resume`, `compact`) leaves the history alone.
     #[test]
-    fn only_a_clear_or_new_session_start_clears_prompts() {
-        let start = |s: Option<&str>| HookEvent::SessionStart {
-            source: s.map(Into::into),
+    fn a_new_conversation_id_drops_the_old_prompts() {
+        use crate::status::HookEvent;
+        let (daemon, id) = daemon_with_one_agent();
+        let prompts = || {
+            daemon
+                .store
+                .get_agent(&id)
+                .unwrap()
+                .unwrap()
+                .recent_prompts
+                .into_iter()
+                .map(|p| p.text)
+                .collect::<Vec<_>>()
         };
-        assert!(clears_prompts(&start(Some("clear"))));
-        assert!(clears_prompts(&start(Some("new"))));
-        for kept in ["startup", "resume", "compact", "fork", "reload"] {
-            assert!(!clears_prompts(&start(Some(kept))), "{kept}");
+        daemon.apply_hook_event(&id, HookEvent::UserPromptSubmit, Some("c1".into()));
+        daemon.record_prompt(&id, "fix the login redirect".into());
+        for source in ["resume", "compact"] {
+            daemon.apply_hook_event(
+                &id,
+                HookEvent::SessionStart {
+                    source: Some(source.into()),
+                },
+                Some("c1".into()),
+            );
         }
-        assert!(!clears_prompts(&start(None)));
-        assert!(!clears_prompts(&HookEvent::UserPromptSubmit));
+        assert_eq!(prompts(), ["fix the login redirect"]);
+
+        daemon.apply_hook_event(&id, HookEvent::UserPromptSubmit, Some("c2".into()));
+        daemon.record_prompt(&id, "now the logout".into());
+        assert_eq!(prompts(), ["now the logout"]);
     }
 }
