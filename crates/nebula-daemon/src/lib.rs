@@ -204,6 +204,10 @@ async fn serve(opts: DaemonOpts) -> Result<()> {
                 if let Some(text) = prompt {
                     daemon.record_prompt(&agent_id, text);
                 }
+                // `/clear` (or pi's `/new`) leaves those prompts behind.
+                if prompt_history::clears_prompts(&event) {
+                    daemon.clear_prompts(&agent_id);
+                }
                 // Claude's own session name (`/rename`) rides no hook, but
                 // every payload says where it is persisted: remember that
                 // for the window-title path and read it now.
