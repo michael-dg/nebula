@@ -1536,6 +1536,54 @@ async fn claude_session_title_and_row_name_stay_tied() {
     wait_for_exit(&mut daemon);
 }
 
+/// A harness's `env` map reaches its sessions' CLI, and the daemon's own
+/// variables win over the map: a `TERM` or `NEBULA_AGENT_ID` set there is
+/// ignored rather than breaking the pane or the hooks.
+#[tokio::test]
+async fn a_harness_env_map_reaches_the_cli_and_the_daemon_vars_win() {
+    let env = TestEnv::new();
+    let repo = env.make_repo();
+    env.write_config(
+        r#"{"harnesses": {"claude": {"env": {
+            "GROK_THEME": "terminal", "TERM": "dumb", "NEBULA_AGENT_ID": "spoofed"
+        }}}}"#,
+    );
+    let seen = env.tmp.path().join("seen");
+    let script = env.tmp.path().join("agent.sh");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nprintf '%s|%s|%s' \"$GROK_THEME\" \"$TERM\" \"$NEBULA_AGENT_ID\" > '{s}.tmp'\n\
+             mv '{s}.tmp' '{s}'\nexec sleep 600\n",
+            s = seen.display()
+        ),
+    )
+    .unwrap();
+    make_executable(&script);
+    let mut daemon = env.spawn_daemon_with_agent_cmd(script.to_str().unwrap());
+
+    let mut c = connect(&env.sock()).await;
+    handshake(&mut c).await;
+    let main_worktree = add_project_get_main_worktree(&mut c, &repo).await;
+    let agent_id = create_agent_get_id(&mut c, &main_worktree.id, "agent-1", 2).await;
+
+    let deadline = tokio::time::Instant::now() + EVENT_TIMEOUT;
+    let line = loop {
+        if let Ok(line) = std::fs::read_to_string(&seen) {
+            break line;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the stand-in CLI never ran"
+        );
+        tokio::time::sleep(POLL_STEP).await;
+    };
+    assert_eq!(line, format!("terminal|xterm-256color|{}", agent_id.0));
+
+    write_frame(&mut c, &ClientRequest::Shutdown).await.unwrap();
+    wait_for_exit(&mut daemon);
+}
+
 /// A kill-and-respawn behind an attached client — Restart here, and the
 /// same path a `nebula worktree` relocation or a cloud re-entry takes —
 /// rebinds that client to the new PTY: a fresh Scrollback and the new
