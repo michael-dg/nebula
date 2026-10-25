@@ -316,6 +316,13 @@
   local `mmdc` when one is on PATH and otherwise shows the source plus a one-line install hint. The
   daemon only checks the caller is a known session and passes the agent's checkout along as the
   editor's working directory. Same appended prompt, plus a `Bash(nebula open:*)` permission.
+- **Sessions say on their card what they are doing.** The appended guidance asks the agent to run
+  `nebula summary "<sentence>"` once it understands the task, and again only when the goal changes:
+  one sentence, at most 80 characters, on the outcome you will get rather than the steps. The DAEMON
+  makes no model call of its own; it tidies the sentence to one line, stores it on the row and pushes
+  it to every TUI. A new conversation in the session (`/clear`, `/new`) empties it with RECENT PROMPTS.
+  Same appended prompt (folded into the first prompt where a harness has no system-prompt flag), plus
+  a `Bash(nebula summary:*)` permission.
 - **Everything persists in SQLite** (`~/.local/share/nebula/nebula.db` or the platform equivalent):
   projects, worktrees, agents (with kind + CLI session ids), links, and your last selection.
 - **Sessions warm up, then get reaped.** The daemon can pre-spawn an agent CLI in the selected worktree

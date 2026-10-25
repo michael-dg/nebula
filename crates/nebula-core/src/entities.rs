@@ -275,6 +275,12 @@ pub struct Agent {
     /// the bottom. Empty for every row that predates the capture.
     #[serde(default)]
     pub recent_prompts: Vec<PromptEntry>,
+    /// One sentence on what the session is doing, written by its own
+    /// agent (`nebula summary`) and kept current by it — the card's
+    /// SUMMARY line. None until the agent first sets it, and again after
+    /// the CLI starts a new conversation.
+    #[serde(default)]
+    pub summary: Option<String>,
 }
 
 impl Agent {

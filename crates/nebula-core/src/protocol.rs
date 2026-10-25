@@ -10,14 +10,14 @@ use std::path::PathBuf;
 ///
 /// Bump on every protocol change. Additive changes keep
 /// [`MIN_COMPATIBLE_PROTOCOL`] where it is; breaking changes bump both.
-pub const PROTOCOL_VERSION: u32 = 51;
+pub const PROTOCOL_VERSION: u32 = 52;
 
 /// Oldest IPC protocol this build can safely talk to.
 ///
 /// Compatibility is a range overlap: two peers can talk when each peer's
 /// `[MIN_COMPATIBLE_PROTOCOL, PROTOCOL_VERSION]` range includes at least one
 /// version the other peer also supports.
-pub const MIN_COMPATIBLE_PROTOCOL: u32 = 49;
+pub const MIN_COMPATIBLE_PROTOCOL: u32 = 52;
 
 /// First protocol whose daemon answers `ClientRequest::CheckWorktree`. A
 /// client asks only a daemon at least this new; an older one is never sent
@@ -276,6 +276,14 @@ pub enum ClientRequest {
         req_id: u64,
         id: AgentId,
         name: String,
+    },
+    /// `nebula summary "<sentence>"` inside the session's CLI: replace the
+    /// row's SUMMARY with the sentence, tidied to one line. Answered with
+    /// Error when the sentence is blank or the row is gone.
+    SetAgentSummary {
+        req_id: u64,
+        id: AgentId,
+        summary: String,
     },
     /// `nebula worktree <name>`, run by the agent from inside its own
     /// session: create the worktree `branch` under the agent's project (or

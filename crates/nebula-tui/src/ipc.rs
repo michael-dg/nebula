@@ -359,6 +359,33 @@ pub async fn rename_current_agent(title: &str, mode: RenameMode) -> Result<()> {
     Ok(())
 }
 
+/// One-shot client for `nebula summary`, run from inside an agent
+/// session's CLI: resolve the agent from NEBULA_AGENT_ID and ask the daemon
+/// to set its card's summary. Never spawns a daemon — no daemon means no
+/// card to write on. A daemon-side refusal (a blank sentence) is a nonzero
+/// exit the model reports.
+pub async fn set_summary_for_current_agent(sentence: &str) -> Result<()> {
+    let agent_id = current_agent_id("summary")?;
+    let sock = paths::socket_path();
+    let Ok(stream) = try_connect(&sock).await else {
+        bail!("no nebula daemon is running — summary unchanged");
+    };
+    let mut conn = handshake(stream).await?;
+    let req_id = ONE_SHOT_REQ_ID;
+    write_frame(
+        &mut conn.stream,
+        &ClientRequest::SetAgentSummary {
+            req_id,
+            id: AgentId(agent_id),
+            summary: sentence.to_string(),
+        },
+    )
+    .await?;
+    await_ack(&mut conn, req_id).await?;
+    println!("session summary set");
+    Ok(())
+}
+
 /// CLI: `nebula spawn "<task>" [--kind <claude|codex|cursor>] [--worktree
 /// <branch> [--base <ref>]]` from inside an agent session — ask the daemon
 /// to start a new agent beside this one, in the same worktree or in the

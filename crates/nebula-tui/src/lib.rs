@@ -90,6 +90,12 @@ pub fn run_rename(title: String, mode: RenameMode) -> Result<()> {
     runtime()?.block_on(ipc::rename_current_agent(&title, mode))
 }
 
+/// `nebula summary` — the agent's one-sentence card line for its own
+/// session (see `ipc::set_summary_for_current_agent`).
+pub fn run_summary(sentence: String) -> Result<()> {
+    runtime()?.block_on(ipc::set_summary_for_current_agent(&sentence))
+}
+
 /// `nebula worktree [name] [--base <ref>]` — move the current agent session
 /// into a worktree of its project (see `ipc::enter_worktree_for_current_agent`).
 pub fn run_worktree(name: String, base: Option<String>) -> Result<()> {

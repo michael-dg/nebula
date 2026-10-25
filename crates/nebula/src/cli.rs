@@ -143,6 +143,19 @@ pub(crate) enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// Say on its card what the session this command runs inside is doing.
+    ///
+    /// Run from inside a nebula agent session: the sentence becomes the
+    /// summary line on that session's card, replacing the previous one.
+    /// Agents run it themselves once they understand the task and again when
+    /// the goal changes. Kept to one line of at most 80 characters; a new
+    /// conversation in the session (`/clear`) empties it.
+    #[command(after_help = SUMMARY_EXAMPLES)]
+    Summary {
+        /// The sentence; multiple words need no quotes.
+        #[arg(required = true, num_args = 1..)]
+        sentence: Vec<String>,
+    },
     /// Move this session into a worktree of its project.
     ///
     /// Run from inside a nebula agent session; agents run it when you ask them
@@ -501,6 +514,10 @@ const RENAME_EXAMPLES: &str = "\
 Examples:
   nebula rename Fix Login Redirect   title this session
   nebula rename --force Auth Rework  replace a title already set";
+
+const SUMMARY_EXAMPLES: &str = "\
+Examples:
+  nebula summary \"Login redirects back to the page the user came from\"";
 
 const WORKTREE_EXAMPLES: &str = "\
 Examples:

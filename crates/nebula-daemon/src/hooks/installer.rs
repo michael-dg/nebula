@@ -143,8 +143,9 @@ fn hook_command(endpoint: &str, event: &str) -> String {
 
 /// Permission rules letting Claude Code run nebula's own commands without a
 /// permission prompt: the auto-title `nebula rename`, and the `nebula
-/// worktree` relocation, `nebula spawn` sibling and `nebula open` file tabs
-/// its appended system prompt tells it to use (codex/cursor run with their
+/// worktree` relocation, `nebula spawn` sibling, `nebula open` file tabs
+/// and `nebula summary` card line its appended system prompt tells it to
+/// use (codex/cursor run with their
 /// skip-permissions flags).
 const CLAUDE_ALLOW_RULES: &[&str] = &[
     "Bash(nebula rename:*)",
@@ -154,6 +155,7 @@ const CLAUDE_ALLOW_RULES: &[&str] = &[
     "Bash(nebula sessions:*)",
     "Bash(nebula read:*)",
     "Bash(nebula ask:*)",
+    "Bash(nebula summary:*)",
 ];
 
 /// Cursor variant: the payload arrives on stdin like Claude's, but cursor

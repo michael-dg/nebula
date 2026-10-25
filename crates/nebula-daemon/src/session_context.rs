@@ -613,6 +613,7 @@ mod tests {
             sort_order: 0,
             alive: false,
             recent_prompts: Vec::new(),
+            summary: None,
         }
     }
 

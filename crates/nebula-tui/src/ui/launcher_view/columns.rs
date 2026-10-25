@@ -418,6 +418,10 @@ fn recent_prompts_for_columns(app: &App, agent: &nebula_core::Agent) -> Option<S
     {
         return None;
     }
+    // The agent's own SUMMARY says it better than any prompt, when set.
+    if let Some(summary) = &agent.summary {
+        return Some(summary.clone());
+    }
     let count = app.launcher.columns_recent_prompts_count;
     let prompts = agent
         .recent_prompts

@@ -332,6 +332,11 @@ const MIGRATIONS: &[&str] = &[
     "
     ALTER TABLE agents ADD COLUMN role TEXT NOT NULL DEFAULT 'worker';
     ",
+    // 30: SUMMARY — the one sentence the session's own agent keeps on what
+    // it is doing (`nebula summary`). NULL until it first sets one.
+    "
+    ALTER TABLE agents ADD COLUMN summary TEXT;
+    ",
 ];
 
 pub struct Store {
@@ -649,6 +654,28 @@ impl Store {
             params![id.as_str(), json],
         )?;
         Ok(true)
+    }
+
+    /// Empty the row's RECENT PROMPTS (NULL is the empty history) and its
+    /// SUMMARY: both describe a conversation the CLI no longer has.
+    /// Returns whether a row was there.
+    pub fn clear_conversation(&self, id: &AgentId) -> Result<bool> {
+        let conn = self.conn.lock();
+        let changed = conn.execute(
+            "UPDATE agents SET recent_prompts = NULL, summary = NULL WHERE id = ?1",
+            params![id.as_str()],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Replace the row's SUMMARY. Returns whether a row was there.
+    pub fn set_summary(&self, id: &AgentId, summary: &str) -> Result<bool> {
+        let conn = self.conn.lock();
+        let changed = conn.execute(
+            "UPDATE agents SET summary = ?2 WHERE id = ?1",
+            params![id.as_str(), summary],
+        )?;
+        Ok(changed > 0)
     }
 
     pub fn agent_claude_title(&self, id: &AgentId) -> Result<Option<String>> {
@@ -1081,7 +1108,7 @@ const WORKTREE_COLUMNS: &str = "id, project_id, path, branch, is_main, sort_orde
 const AGENT_COLUMNS: &str = "id, worktree_id, name, status, archived, kind, \
                              claude_session_id, sort_order, status_changed_at, model, effort, \
                              archived_at, unseen, cloud_session_id, recent_prompts, custom_harness, \
-                             issue_url, role";
+                             issue_url, role, summary";
 const TERMINAL_COLUMNS: &str = "id, worktree_id, name, sort_order, run_command";
 const LINK_COLUMNS: &str = "id, worktree_id, url, sort_order";
 
@@ -1132,6 +1159,7 @@ fn row_to_agent(r: &rusqlite::Row) -> rusqlite::Result<Agent> {
             .unwrap_or_default(),
         recent_prompts: parse_prompts(r.get::<_, Option<String>>(14)?.as_deref()),
         custom_harness: r.get(15)?,
+        summary: r.get(18)?,
     })
 }
 
@@ -1230,6 +1258,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            summary: None,
         };
         let pr_url = "https://github.com/AgentSystemLabs/nebula/pull/42";
         store
@@ -1255,6 +1284,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            summary: None,
         };
         store.insert_agent(&codex_agent).unwrap();
         let cursor_agent = Agent {
@@ -1277,6 +1307,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            summary: None,
         };
         store.insert_agent(&cursor_agent).unwrap();
         let issue_url = "https://github.com/AgentSystemLabs/nebula/issues/15";
@@ -1300,6 +1331,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            summary: None,
         };
         store
             .insert_agent_with_launch_context(&issue_agent, true, None, Some(issue_url))
@@ -1343,6 +1375,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            summary: None,
         };
         store.insert_agent(&custom).unwrap();
         let (_, _, reloaded, _) = store.load_tree().unwrap();
@@ -1849,6 +1882,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            summary: None,
         };
 
         // Default-named session: pending until the agent titles it, and the
@@ -1938,6 +1972,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    summary: None,
                 },
                 true,
             )
@@ -2068,6 +2103,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    summary: None,
                 })
                 .unwrap();
         }
@@ -2133,6 +2169,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    summary: None,
                 })
                 .unwrap();
         }
@@ -2195,6 +2232,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                summary: None,
             };
             store.insert_agent(&agent).unwrap();
             agent.id
@@ -2296,6 +2334,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                summary: None,
             })
             .unwrap();
         let entry = |n: usize| PromptEntry {
