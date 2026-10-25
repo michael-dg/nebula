@@ -213,6 +213,20 @@ Codex, Cursor, Pi or OpenCode, or a `/resume` of another one — empties the his
 belong to a conversation the session no longer has. Resuming or compacting keeps it, and the
 session's name stays either way.
 
+## SUMMARY
+
+A prompt like "continue" says nothing about where the work stands, so the agent also writes one
+sentence about what the session is doing: its SUMMARY. The card shows it on the row under the harness,
+clipped to one line, with the last prompt wrapped over the rows below it. The compact LIST and the
+SESSIONS column show it in the prompt's place.
+
+The agent writes it by running `nebula summary "<sentence>"`, which nebula's guidance asks it to do once
+it understands the task and again when the goal changes, not at every step. The sentence is about the
+outcome you will get, not the files or commands behind it. The DAEMON makes no model call of its own:
+it turns the sentence into one line of at most 80 characters, stores it on the row and pushes it to
+every TUI. A session with no summary yet shows its card as before. Starting a new conversation empties
+the summary along with RECENT PROMPTS.
+
 ## The GRID
 
 nebula opens on a GRID of session cards — no modal over it, ever, on any launch. Starting a session

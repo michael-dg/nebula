@@ -16,6 +16,7 @@ nebula daemon               run the daemon that owns every session
 nebula kill                 shut the running daemon down (stops all sessions)
 nebula reload               move the daemon onto the installed binary, keeping every session
 nebula rename <title>       title the session this runs inside          (agents run this)
+nebula summary <sentence>   say on its card what this session is doing  (agents run this)
 nebula worktree [name]      move this session into a worktree           (agents run this)
 nebula spawn <task>         start another agent session beside it       (agents run this)
 nebula open <file>…         show files/images/diagrams in file tabs     (agents run this)
@@ -64,6 +65,9 @@ nebula reload             # restart the daemon in place onto the binary this run
 
 ```sh
 nebula rename <title>     # title the current session (agents run this; --force to retitle)
+nebula summary <sentence> # set the current session's SUMMARY, the card's one line on what it is
+                          # doing (agents run this once they understand the task and again when
+                          # the goal changes; one line, at most 80 characters)
 nebula worktree [name] [--base <ref>]  # move the current session into a worktree of its project,
                           # creating the branch if it's new (agents run this when you ask for a
                           # worktree; no name invents one; --base picks a new branch's start point,

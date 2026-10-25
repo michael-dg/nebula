@@ -6138,6 +6138,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                summary: None,
             })
             .collect();
         app
@@ -6431,6 +6432,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            summary: None,
         });
         app.tree.agents.push(Agent {
             id: AgentId("a2".into()),
@@ -6665,6 +6667,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                summary: None,
             });
         }
 

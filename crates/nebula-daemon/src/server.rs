@@ -336,6 +336,17 @@ impl ClientConnection {
                 reply_done(&self.out_tx, req_id, result).await;
                 Ok(true)
             }
+            ClientRequest::SetAgentSummary {
+                req_id,
+                id,
+                summary,
+            } => {
+                let result = self
+                    .blocking_daemon(move |daemon| daemon.set_summary(&id, &summary))
+                    .await;
+                reply_done(&self.out_tx, req_id, result).await;
+                Ok(true)
+            }
             ClientRequest::SpawnSiblingAgent {
                 req_id,
                 id,

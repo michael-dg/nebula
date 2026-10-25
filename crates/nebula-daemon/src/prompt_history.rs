@@ -60,6 +60,17 @@ pub fn is_injected(text: &str) -> bool {
 /// ellipsis past [`MAX_PROMPT_CHARS`]. `None` for a blank prompt or one
 /// nobody typed ([`is_injected`]).
 pub fn condense(raw: &str) -> Option<String> {
+    let text = one_line(raw, MAX_PROMPT_CHARS);
+    if text.is_empty() || is_injected(&text) {
+        return None;
+    }
+    Some(text)
+}
+
+/// `raw` as one line of at most `max_chars`: control characters become
+/// spaces, whitespace runs collapse to single spaces, and a longer line is
+/// clipped with an ellipsis. Empty when nothing but whitespace was there.
+pub(crate) fn one_line(raw: &str, max_chars: usize) -> String {
     let cleaned: String = raw
         .chars()
         .map(|c| if c.is_control() { ' ' } else { c })
@@ -71,15 +82,12 @@ pub fn condense(raw: &str) -> Option<String> {
         }
         text.push_str(word);
     }
-    if text.is_empty() || is_injected(&text) {
-        return None;
-    }
-    if text.chars().count() > MAX_PROMPT_CHARS {
-        let mut clipped: String = text.chars().take(MAX_PROMPT_CHARS - 1).collect();
+    if text.chars().count() > max_chars {
+        let mut clipped: String = text.chars().take(max_chars - 1).collect();
         clipped.push('…');
-        return Some(clipped);
+        return clipped;
     }
-    Some(text)
+    text
 }
 
 impl Daemon {
@@ -98,12 +106,13 @@ impl Daemon {
         }
     }
 
-    /// Empty the session's history and push the row to every subscriber —
-    /// the CLI started a new conversation (`Effect::ConversationChanged`),
-    /// so the prompts it held describe one that is gone. A missing row is
-    /// silently nothing.
-    pub fn clear_prompts(&self, id: &AgentId) {
-        match self.store.clear_prompts(id) {
+    /// Empty the session's history and its SUMMARY, and push the row to
+    /// every subscriber — the CLI started a new conversation
+    /// (`Effect::ConversationChanged`), so the prompts it held and the
+    /// sentence its agent wrote describe one that is gone. A missing row
+    /// is silently nothing.
+    pub fn clear_conversation(&self, id: &AgentId) {
+        match self.store.clear_conversation(id) {
             Ok(true) => self.try_broadcast_agent(id),
             Ok(false) => {}
             Err(e) => tracing::warn!(agent = %id, error = %e, "prompts not cleared"),
@@ -112,7 +121,7 @@ impl Daemon {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -187,7 +196,7 @@ mod tests {
     }
 
     /// A daemon over an in-memory store holding one row, `a1`.
-    fn daemon_with_one_agent() -> (Arc<Daemon>, AgentId) {
+    pub(crate) fn daemon_with_one_agent() -> (Arc<Daemon>, AgentId) {
         use crate::hooks::HookEnv;
         use crate::store::Store;
         use nebula_core::{
@@ -234,6 +243,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                summary: None,
             })
             .unwrap();
         let daemon = Daemon::new(
@@ -273,29 +283,35 @@ mod tests {
     }
 
     /// `/clear` keeps the session id but not the conversation: the
-    /// prompts typed before it leave the store and every TUI's row.
+    /// prompts typed before it and the agent's SUMMARY of it leave the
+    /// store and every TUI's row.
     #[tokio::test]
-    async fn clear_prompts_empties_the_history_and_upserts_the_row() {
+    async fn clear_conversation_empties_the_history_and_the_summary_and_upserts_the_row() {
         use nebula_core::{Entity, ServerEvent};
         let (daemon, id) = daemon_with_one_agent();
         daemon.record_prompt(&id, "fix the login redirect".into());
         daemon.record_prompt(&id, "now the logout".into());
+        daemon
+            .set_summary(&id, "Login redirects back home")
+            .unwrap();
         let mut events = daemon.events.subscribe();
 
-        daemon.clear_prompts(&id);
+        daemon.clear_conversation(&id);
         match events.try_recv() {
             Ok(ServerEvent::EntityUpserted {
                 entity: Entity::Agent(a),
             }) => {
                 assert_eq!(a.id, id);
                 assert!(a.recent_prompts.is_empty());
+                assert_eq!(a.summary, None);
             }
             other => panic!("expected the row's upsert, got {other:?}"),
         }
         let stored = daemon.store.get_agent(&id).unwrap().unwrap();
         assert!(stored.recent_prompts.is_empty());
+        assert_eq!(stored.summary, None);
 
-        daemon.clear_prompts(&AgentId("ghost".into()));
+        daemon.clear_conversation(&AgentId("ghost".into()));
         assert!(events.try_recv().is_err(), "an unknown id is silent");
     }
 

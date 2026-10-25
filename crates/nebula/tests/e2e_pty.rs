@@ -4339,6 +4339,111 @@ async fn auto_title_instruction_and_rename_flow() {
     wait_for_exit(&mut daemon);
 }
 
+/// `nebula summary` from inside a session, end to end over real processes:
+/// the CLI (what the model runs) sets the row's SUMMARY and every
+/// subscriber gets the row, a blank sentence fails the CLI, and a `/clear`
+/// reported through the SessionStart hook empties the summary again.
+#[tokio::test]
+async fn nebula_summary_cli_sets_the_card_line_and_clear_empties_it() {
+    let env = TestEnv::new();
+    let repo = env.make_repo();
+    let env_dir = env.tmp.path().join("agent-env");
+    std::fs::create_dir_all(&env_dir).unwrap();
+    // Stand-in CLI: capture the NEBULA_* env its hooks would use, then park.
+    let script = env.tmp.path().join("agent.sh");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nenv | grep '^NEBULA_' > '{}'/$NEBULA_AGENT_ID.env\nexec sleep 600\n",
+            env_dir.display()
+        ),
+    )
+    .unwrap();
+    make_executable(&script);
+    let mut daemon = env.spawn_daemon_with_agent_cmd(script.to_str().unwrap());
+
+    let mut c = connect(&env.sock()).await;
+    handshake(&mut c).await;
+    let worktree = add_project_get_main_worktree(&mut c, &repo).await;
+    write_frame(
+        &mut c,
+        &ClientRequest::CreateAgent {
+            req_id: 2,
+            worktree: worktree.id.clone(),
+            name: "agent-1".into(),
+            kind: AgentKind::Claude,
+            custom_harness: None,
+            model: None,
+            effort: None,
+            auto_title: false,
+            cloud_prompt: None,
+            starting_prompt: None,
+            issue_url: None,
+            role: nebula_core::AgentRole::Worker,
+        },
+    )
+    .await
+    .unwrap();
+    let events = read_events_until(&mut c, EVENT_TIMEOUT, |evs| find_ack(evs, 2).is_some()).await;
+    let ServerEvent::Ack {
+        created: Some(EntityId::Agent(agent_id)),
+        ..
+    } = find_ack(&events, 2).unwrap()
+    else {
+        panic!("CreateAgent failed: {events:#?}");
+    };
+    let agent_id = agent_id.clone();
+    let agent_env = read_env_file(&env_dir.join(format!("{}.env", agent_id.0))).await;
+
+    let out = agent_cli(
+        &env,
+        &agent_id,
+        &["summary", "Login", "redirects", "back", "home"],
+    );
+    assert!(out.status.success(), "summary failed: {out:?}");
+    read_events_until(&mut c, EVENT_TIMEOUT, |evs| {
+        evs.iter().any(|e| {
+            matches!(e, ServerEvent::EntityUpserted { entity: Entity::Agent(a) }
+                if a.id == agent_id && a.summary.as_deref() == Some("Login redirects back home"))
+        })
+    })
+    .await;
+
+    let out = agent_cli(&env, &agent_id, &["summary", " "]);
+    assert!(!out.status.success(), "a blank summary must fail: {out:?}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("summary is empty"), "stderr: {stderr}");
+
+    // `/clear`: Claude reports the new conversation as a SessionStart.
+    let port: u16 = agent_env[env::API_URL]
+        .rsplit(':')
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let (status, _) = hook_post_json(
+        port,
+        &format!(
+            "/api/hooks/claude?agentId={}&hookEvent=SessionStart",
+            agent_id.0
+        ),
+        &agent_env[env::API_TOKEN],
+        r#"{"session_id":"s1","source":"clear"}"#,
+    )
+    .await;
+    assert_eq!(status, 200);
+    read_events_until(&mut c, EVENT_TIMEOUT, |evs| {
+        evs.iter().any(|e| {
+            matches!(e, ServerEvent::EntityUpserted { entity: Entity::Agent(a) }
+                if a.id == agent_id && a.summary.is_none())
+        })
+    })
+    .await;
+
+    write_frame(&mut c, &ClientRequest::Shutdown).await.unwrap();
+    wait_for_exit(&mut daemon);
+}
+
 /// `nebula open <file>…` from inside a session, end to end over real
 /// processes: the CLI (what the model runs) resolves the paths against its
 /// own cwd, the daemon checks the caller and fans the files out to every

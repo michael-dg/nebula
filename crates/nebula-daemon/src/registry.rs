@@ -593,6 +593,7 @@ fn agent_spawn_command_with(
             first.push(crate::sibling::CLAUDE_SPAWN_GUIDANCE.to_string());
             first.push(crate::sibling::CLAUDE_SESSION_CONTEXT_GUIDANCE.to_string());
             first.push(crate::open_files::CLAUDE_OPEN_GUIDANCE.to_string());
+            first.push(crate::session_summary::CLAUDE_SUMMARY_GUIDANCE.to_string());
         }
         if let Some(prompt) = additional_system_prompt {
             first.push(prompt.to_string());
@@ -631,6 +632,7 @@ fn push_system_prompt(
         system_prompt.push(crate::sibling::CLAUDE_SPAWN_GUIDANCE);
         system_prompt.push(crate::sibling::CLAUDE_SESSION_CONTEXT_GUIDANCE);
         system_prompt.push(crate::open_files::CLAUDE_OPEN_GUIDANCE);
+        system_prompt.push(crate::session_summary::CLAUDE_SUMMARY_GUIDANCE);
     }
     if let Some(prompt) = additional {
         system_prompt.push(prompt);
@@ -998,6 +1000,7 @@ mod tests {
                     crate::sibling::CLAUDE_SPAWN_GUIDANCE,
                     crate::sibling::CLAUDE_SESSION_CONTEXT_GUIDANCE,
                     crate::open_files::CLAUDE_OPEN_GUIDANCE,
+                    crate::session_summary::CLAUDE_SUMMARY_GUIDANCE,
                 ]
                 .join("\n\n"),
             ])
@@ -1839,6 +1842,7 @@ mod tests {
         assert!(prompts[0].contains(CLAUDE_WORKTREE_GUIDANCE));
         assert!(prompts[0].contains(crate::sibling::CLAUDE_SPAWN_GUIDANCE));
         assert!(prompts[0].contains(crate::open_files::CLAUDE_OPEN_GUIDANCE));
+        assert!(prompts[0].contains(crate::session_summary::CLAUDE_SUMMARY_GUIDANCE));
         assert!(prompts[0].contains("All work in this session must be scoped"));
         assert!(prompts[0].contains(pr_url));
         assert!(prompts[0].contains("/w/nebula-worktrees/fix"));
@@ -3114,6 +3118,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                summary: None,
             })
             .unwrap();
     }
@@ -3508,6 +3513,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    summary: None,
                 },
                 true,
             )

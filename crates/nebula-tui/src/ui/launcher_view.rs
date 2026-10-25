@@ -1470,8 +1470,11 @@ fn draw_list_row(
                 ramp: look.ramp,
                 runs: runs_on_line(a, cfg),
                 runs_style: Style::default().fg(quiet_or(th.dim)),
-                text_mark: "› ",
-                text: crate::launcher::last_prompt(a)
+                text_mark: if a.summary.is_some() { "" } else { "› " },
+                text: a
+                    .summary
+                    .as_deref()
+                    .or(crate::launcher::last_prompt(a))
                     .unwrap_or_default()
                     .to_string(),
                 text_style: Style::default().fg(quiet_or(th.muted)),
@@ -2295,14 +2298,24 @@ fn draw_card(
         }
     }
 
-    // The last thing it was asked to do, on the prompt's own `›` (which
+    // The agent's SUMMARY of what it is doing, one clipped line, then the
+    // last thing it was asked to do, on the prompt's own `›` (which
     // `hide_card_marks` leaves off), over the card's last rows rather than
     // clipped at the first.
     let mut lines = vec![first, second];
     lines.resize(crate::launcher::CARD_HEAD_H as usize, Vec::new());
+    let mut prompt_rows = crate::launcher::PROMPT_LINES;
+    if let Some(summary) = a.summary.as_deref() {
+        lines.push(vec![Span::styled(
+            truncate(summary, width),
+            Style::default().fg(quiet_or(th.text)),
+        )]);
+        prompt_rows -= 1;
+    }
     lines.extend(prompt_lines(
         crate::launcher::last_prompt(a).unwrap_or_default(),
         width,
+        prompt_rows,
         (!app.launcher.hide_card_marks).then(|| quiet_or(dim)),
         quiet_or(prompt),
     ));
@@ -2519,6 +2532,7 @@ fn draw_list_empty(f: &mut Frame, app: &mut App, area: Rect, what: &str) {
 fn prompt_lines(
     prompt: &str,
     width: usize,
+    keep: usize,
     mark: Option<Color>,
     text: Color,
 ) -> Vec<Vec<Span<'static>>> {
@@ -2533,7 +2547,6 @@ fn prompt_lines(
         return Vec::new();
     }
     let wrapped = crate::pr_preview::wrap(prompt, body);
-    let keep = crate::launcher::PROMPT_LINES;
     let cut = wrapped.len() > keep;
     wrapped
         .into_iter()
@@ -3837,6 +3850,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                summary: None,
             })
             .collect();
         app
@@ -4249,6 +4263,46 @@ mod tests {
         assert!(lines[row + 1].contains("claude"), "{:?}", lines[row + 1]);
     }
 
+    /// A card whose agent wrote a SUMMARY shows it on the row under the
+    /// harness, with the last prompt still below it; the compact LIST's
+    /// one line shows the summary in the prompt's place.
+    #[test]
+    fn a_card_shows_its_summary_above_its_last_prompt() {
+        let mut app = a_tree();
+        select(&mut app, "api");
+        app.tree.agents[0].recent_prompts = vec![nebula_core::PromptEntry {
+            text: "continue".into(),
+            submitted_at: 0,
+        }];
+        app.tree.agents[0].summary = Some("Login redirects back home".into());
+        let body = Rect::new(0, 0, 100, 30);
+
+        let lines = drawn_lines(&mut app, body);
+        let row = lines
+            .iter()
+            .position(|l| l.contains("s0"))
+            .expect("the session's card");
+        assert!(
+            lines[row + 2].contains("Login redirects back home"),
+            "{:?}",
+            lines[row + 2]
+        );
+        assert!(
+            lines[row + 3].contains("› continue"),
+            "{:?}",
+            lines[row + 3]
+        );
+
+        app.launcher.launcher_list = true;
+        let lines = drawn_lines(&mut app, body);
+        let row = lines
+            .iter()
+            .find(|l| l.contains("s0"))
+            .expect("the session's entry");
+        assert!(row.contains("Login redirects back home"), "{row:?}");
+        assert!(!row.contains("continue"), "{row:?}");
+    }
+
     /// The `card_issue_number` setting puts an ISSUE SESSION's `#15` at
     /// the right end of the row saying what it runs on — only with the
     /// setting on, only on a card started from an issue — and registers
@@ -4357,6 +4411,29 @@ mod tests {
         assert!(app.hit_rect(&HitTarget::ProjectRow(0)).is_some());
         assert!(app.hit_rect(&HitTarget::WorktreeRow(0)).is_some());
         assert!(app.hit_rect(&HitTarget::SessionRow(0)).is_some());
+    }
+
+    /// The SESSIONS column shows the agent's SUMMARY in place of its
+    /// recent prompts, under the same setting.
+    #[test]
+    fn columns_layout_shows_the_summary_instead_of_the_prompts() {
+        let mut app = a_tree();
+        app.launcher.launcher_columns = true;
+        app.launcher.columns_recent_prompts = true;
+        app.tree.agents[0].recent_prompts = vec![nebula_core::PromptEntry {
+            text: "continue".into(),
+            submitted_at: 0,
+        }];
+        app.tree.agents[0].summary = Some("Columns read well".into());
+        app.nav.focus = Focus::Projects;
+
+        let lines = drawn_lines(&mut app, Rect::new(0, 0, 96, 12)).join("\n");
+        assert!(lines.contains("Columns read well"), "{lines}");
+        assert!(!lines.contains("continue"), "{lines}");
+
+        app.launcher.columns_recent_prompts = false;
+        let lines = drawn_lines(&mut app, Rect::new(0, 0, 96, 12)).join("\n");
+        assert!(!lines.contains("Columns read well"), "{lines}");
     }
 
     /// `a_tree` with `count` checkouts in `api` instead of one, a session
@@ -5055,6 +5132,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    summary: None,
                 },
                 project: "nebula".into(),
                 branch: branch.into(),
@@ -5291,6 +5369,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            summary: None,
         };
         let th = Theme::by_name("amber");
         let mut app = App::new();
@@ -5400,6 +5479,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                summary: None,
             },
             project: "nebula".into(),
             branch: "feat-x".into(),
@@ -5456,6 +5536,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                summary: None,
             },
             project: "nebula".into(),
             branch: "feat-x".into(),
@@ -5607,6 +5688,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    summary: None,
                 },
                 project: "nebula".into(),
                 branch: "main".into(),
