@@ -94,6 +94,10 @@ pub const PANE_COLORTERM: &str = "truecolor";
 /// out, so a user who wants none keeps none.
 pub const PANE_COLOR_OVERRIDES: &[&str] = &["NO_COLOR", "FORCE_COLOR"];
 
+/// Names a harness's `env` map cannot set on an agent PTY: the session
+/// vars and the pane's grid. The daemon's values always win.
+pub const AGENT_RESERVED_VARS: &[&str] = &[AGENT_ID, API_URL, API_TOKEN, "TERM", "COLORTERM"];
+
 /// Variables a Claude Code session sets on the shells it runs tools in,
 /// naming that session: its id, its process, its messaging socket and
 /// token, and the marker that says "this process is my sub-process". A

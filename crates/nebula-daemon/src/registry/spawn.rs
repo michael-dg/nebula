@@ -583,14 +583,7 @@ impl Daemon {
             program,
             args,
             cwd: worktree.path.clone(),
-            env: vec![
-                (env::AGENT_ID.into(), agent.id.to_string()),
-                (
-                    env::API_URL.into(),
-                    format!("http://127.0.0.1:{}", self.hook_env.port),
-                ),
-                (env::API_TOKEN.into(), self.hook_env.token.clone()),
-            ],
+            env: agent_env(&harness, &agent.id, &self.hook_env),
             scrub_env: env::AGENT_SESSION_VARS,
             cols,
             rows,

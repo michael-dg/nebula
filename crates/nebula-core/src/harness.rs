@@ -201,6 +201,11 @@ pub struct HarnessDescriptor {
     /// (Cursor's family-suffix shape).
     #[serde(default, skip_serializing_if = "is_false")]
     pub compose_model_effort: bool,
+    /// Extra environment variables every spawn and resume of this
+    /// harness's sessions gets, beside the ones the daemon sets (which
+    /// always win: see `nebula_core::env::AGENT_RESERVED_VARS`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, String>,
 }
 
 fn is_false(value: &bool) -> bool {
@@ -350,8 +355,31 @@ impl HarnessDescriptor {
                 }
             }
         }
+        for (name, value) in &self.env {
+            if !valid_env_name(name) {
+                return Some(format!(
+                    "harness `{}` env `{name}`: use letters, digits and underscores, not starting with a digit",
+                    self.id.trim()
+                ));
+            }
+            if value.contains('\0') {
+                return Some(format!(
+                    "harness `{}` env `{name}` holds a NUL byte",
+                    self.id.trim()
+                ));
+            }
+        }
         None
     }
+}
+
+/// `[A-Za-z_][A-Za-z0-9_]*`: a name every shell can export.
+fn valid_env_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 fn models(ids: &[&str]) -> Vec<ModelEntry> {
@@ -382,6 +410,7 @@ pub fn builtin(id: &str) -> Option<HarnessDescriptor> {
         hooks: None,
         relocation_prompt: false,
         compose_model_effort: false,
+        env: BTreeMap::new(),
     };
     Some(match id.trim() {
         "claude" => HarnessDescriptor {
@@ -686,6 +715,9 @@ pub struct HarnessOverride {
     pub relocation_prompt: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compose_model_effort: Option<bool>,
+    /// Replaces the row's whole env map.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<BTreeMap<String, String>>,
 }
 
 impl HarnessDescriptor {
@@ -743,6 +775,9 @@ impl HarnessDescriptor {
         }
         if let Some(compose) = over.compose_model_effort {
             self.compose_model_effort = compose;
+        }
+        if let Some(env) = over.env.clone() {
+            self.env = env;
         }
     }
 }
@@ -826,6 +861,7 @@ impl CustomHarness {
             hooks: self.hooks.clone(),
             relocation_prompt: false,
             compose_model_effort: false,
+            env: BTreeMap::new(),
         }
     }
 
@@ -906,6 +942,7 @@ pub fn registry(
             hooks: None,
             relocation_prompt: false,
             compose_model_effort: false,
+            env: BTreeMap::new(),
         };
         // A map-only entry that maps effort shows its Effort row like a
         // built-in; a bare program stays Model-only like a legacy custom.
@@ -1167,5 +1204,65 @@ mod tests {
         };
         assert_eq!(claude_hooks.problem(), None);
         assert_eq!(claude_hooks.hook_dialect(), Some(crate::AgentKind::Claude));
+    }
+
+    #[test]
+    fn env_map_parses_from_config_and_replaces_the_rows_map() {
+        let overrides: BTreeMap<String, HarnessOverride> =
+            serde_json::from_str(r#"{"grok": {"env": {"GROK_THEME": "terminal"}}}"#).unwrap();
+        let all = registry(&overrides, &[]);
+        let grok = resolve(&all, AgentKind::Grok, None).unwrap();
+        assert_eq!(
+            grok.env.get("GROK_THEME").map(String::as_str),
+            Some("terminal")
+        );
+        let mut descriptor = grok.clone();
+        descriptor.apply(&HarnessOverride {
+            env: Some(BTreeMap::from([("OTHER".into(), "1".into())])),
+            ..HarnessOverride::default()
+        });
+        assert_eq!(
+            descriptor.env,
+            BTreeMap::from([("OTHER".into(), "1".into())]),
+            "a set map replaces the row's whole map"
+        );
+    }
+
+    /// `nebula config harnesses` prints rows as serialized: an empty map
+    /// stays out of every built-in's row.
+    #[test]
+    fn empty_env_is_left_out_of_the_printed_row() {
+        let text = serde_json::to_string(&builtin("claude").unwrap()).unwrap();
+        assert!(!text.contains("\"env\""), "{text}");
+        let with_env = HarnessDescriptor {
+            env: BTreeMap::from([("GROK_THEME".into(), "terminal".into())]),
+            ..builtin("grok").unwrap()
+        };
+        let text = serde_json::to_string(&with_env).unwrap();
+        assert!(
+            text.contains(r#""env":{"GROK_THEME":"terminal"}"#),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn bad_env_entries_are_problems_that_refuse_only_their_harness() {
+        let with = |name: &str, value: &str| HarnessDescriptor {
+            env: BTreeMap::from([(name.into(), value.into())]),
+            ..builtin("grok").unwrap()
+        };
+        assert_eq!(with("GROK_THEME", "terminal").problem(), None);
+        assert_eq!(with("_x9", "").problem(), None);
+        for name in ["", "9LIVES", "A-B", "A B", "A=B", "É"] {
+            assert!(with(name, "v").problem().is_some(), "name {name:?}");
+        }
+        assert!(with("A", "a\0b").problem().unwrap().contains("NUL"));
+
+        let overrides: BTreeMap<String, HarnessOverride> =
+            serde_json::from_str(r#"{"grok": {"env": {"BAD-NAME": "x"}}}"#).unwrap();
+        let all = registry(&overrides, &[]);
+        let refusal = resolve(&all, AgentKind::Grok, None).unwrap_err();
+        assert!(refusal.contains("BAD-NAME"), "{refusal}");
+        assert!(resolve(&all, AgentKind::Claude, None).is_ok());
     }
 }

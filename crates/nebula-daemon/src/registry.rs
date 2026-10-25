@@ -891,6 +891,35 @@ fn resolve_harness_in(
         .map_err(anyhow::Error::msg)
 }
 
+/// The env an agent PTY gets: the harness's `env` map, minus the names
+/// the daemon reserves ([`env::AGENT_RESERVED_VARS`]), then the session
+/// vars that tell hooks and the CLI which agent they run in.
+fn agent_env(
+    harness: &nebula_core::harness::HarnessDescriptor,
+    agent: &AgentId,
+    hook_env: &HookEnv,
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = harness
+        .env
+        .iter()
+        .filter(|(name, _)| {
+            let reserved = env::AGENT_RESERVED_VARS.contains(&name.as_str());
+            if reserved {
+                tracing::warn!(harness = %harness.id, var = %name, "harness env names a variable the daemon sets — ignored");
+            }
+            !reserved
+        })
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    out.push((env::AGENT_ID.into(), agent.to_string()));
+    out.push((
+        env::API_URL.into(),
+        format!("http://127.0.0.1:{}", hook_env.port),
+    ));
+    out.push((env::API_TOKEN.into(), hook_env.token.clone()));
+    out
+}
+
 /// Wrap `program args…` in a login + interactive shell (`$SHELL -l -i -c
 /// 'exec <"$NEBULA_PANE_TTY"; unset …; export …; prog args'`) so the child gets the
 /// user's real environment — ~/.zprofile and ~/.zshrc on zsh — rather than
@@ -2271,6 +2300,43 @@ mod tests {
             "xterm-256color|truecolor|unset|unset",
             "stderr: {}",
             String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    /// A harness's env map rides beside the session vars, and a name the
+    /// daemon sets itself never reaches the PTY from the map.
+    #[test]
+    fn agent_env_adds_the_harness_map_and_the_daemon_vars_win() {
+        let harness = nebula_core::harness::HarnessDescriptor {
+            env: [
+                ("GROK_THEME", "terminal"),
+                (env::AGENT_ID, "spoofed"),
+                (env::API_TOKEN, "spoofed"),
+                ("TERM", "dumb"),
+                ("COLORTERM", "no"),
+            ]
+            .into_iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect(),
+            ..test_harness(&test_registry(), AgentKind::Grok)
+        };
+        let hook_env = HookEnv {
+            port: 4242,
+            token: "tok".into(),
+        };
+        let got = agent_env(&harness, &AgentId("a1".into()), &hook_env);
+        let pairs: Vec<(&str, &str)> = got
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![
+                ("GROK_THEME", "terminal"),
+                (env::AGENT_ID, "a1"),
+                (env::API_URL, "http://127.0.0.1:4242"),
+                (env::API_TOKEN, "tok"),
+            ]
         );
     }
 
