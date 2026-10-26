@@ -261,6 +261,8 @@ pub enum MenuAction {
     /// (`ClientRequest::SendCloudMessage`), via a prompt.
     SendCloudMessage(AgentId),
     RenameAgent(AgentId),
+    /// The user's note on the session's card, via a prompt.
+    EditAgentNote(AgentId),
     ArchiveAgent(AgentId),
     UnarchiveAgent(AgentId),
     DeleteAgent(AgentId),
@@ -824,6 +826,10 @@ pub enum PromptKind {
         back: Option<Box<crate::pr_modal::PullRequestsView>>,
     },
     RenameAgent {
+        id: AgentId,
+    },
+    /// The user's own note on a session's card; empty removes it.
+    AgentNote {
         id: AgentId,
     },
     RenameTerminal {
@@ -6138,6 +6144,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                note: None,
             })
             .collect();
         app
@@ -6431,6 +6438,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            note: None,
         });
         app.tree.agents.push(Agent {
             id: AgentId("a2".into()),
@@ -6665,6 +6673,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                note: None,
             });
         }
 

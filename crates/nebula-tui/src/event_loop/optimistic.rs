@@ -56,6 +56,35 @@ fn remove(
     send_with(app, out, undo, make);
 }
 
+/// The card's note shows at once; the daemon's cleaned copy (one line,
+/// capped) replaces it with the row's upsert. Empty removes the note.
+pub(super) fn set_agent_note(
+    app: &mut App,
+    id: AgentId,
+    note: String,
+    out: &mut Vec<ClientRequest>,
+) {
+    let make = |req_id| ClientRequest::SetAgentNote {
+        req_id,
+        id: id.clone(),
+        note: note.clone(),
+    };
+    match app.tree.agents.iter().find(|a| a.id == id) {
+        Some(before) => {
+            let mut after = before.clone();
+            after.note = Some(note.trim().to_string()).filter(|n| !n.is_empty());
+            upsert(
+                app,
+                Entity::Agent(before.clone()),
+                Entity::Agent(after),
+                out,
+                make,
+            );
+        }
+        None => send_with(app, out, PendingIntent::None, make),
+    }
+}
+
 pub(super) fn rename_agent(app: &mut App, id: AgentId, name: String, out: &mut Vec<ClientRequest>) {
     let make = |req_id| ClientRequest::RenameAgent {
         req_id,

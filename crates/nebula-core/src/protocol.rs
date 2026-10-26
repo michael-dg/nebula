@@ -10,14 +10,14 @@ use std::path::PathBuf;
 ///
 /// Bump on every protocol change. Additive changes keep
 /// [`MIN_COMPATIBLE_PROTOCOL`] where it is; breaking changes bump both.
-pub const PROTOCOL_VERSION: u32 = 51;
+pub const PROTOCOL_VERSION: u32 = 52;
 
 /// Oldest IPC protocol this build can safely talk to.
 ///
 /// Compatibility is a range overlap: two peers can talk when each peer's
 /// `[MIN_COMPATIBLE_PROTOCOL, PROTOCOL_VERSION]` range includes at least one
 /// version the other peer also supports.
-pub const MIN_COMPATIBLE_PROTOCOL: u32 = 49;
+pub const MIN_COMPATIBLE_PROTOCOL: u32 = 52;
 
 /// First protocol whose daemon answers `ClientRequest::CheckWorktree`. A
 /// client asks only a daemon at least this new; an older one is never sent
@@ -266,6 +266,17 @@ pub enum ClientRequest {
         req_id: u64,
         id: AgentId,
         name: String,
+    },
+    /// The user's note on a session's card (`⇧N` on the grid). The daemon
+    /// cleans it to one line and caps it at [`AGENT_NOTE_MAX_CHARS`]; an
+    /// empty note removes it. Only the TUI sends it: no in-session command
+    /// does, so the note stays the user's own.
+    ///
+    /// [`AGENT_NOTE_MAX_CHARS`]: crate::entities::AGENT_NOTE_MAX_CHARS
+    SetAgentNote {
+        req_id: u64,
+        id: AgentId,
+        note: String,
     },
     /// Agent-initiated one-shot title (`nebula rename` inside the session's
     /// CLI). Applies only while the session still awaits its auto-title;

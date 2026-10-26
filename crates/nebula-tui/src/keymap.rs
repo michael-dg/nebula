@@ -113,6 +113,7 @@ pub enum Action {
     // sessions
     NewTerminal,
     Rename,
+    EditNote,
     Archive,
     Unarchive,
     ToggleArchived,
@@ -487,6 +488,15 @@ pub const ACTIONS: &[ActionSpec] = &[
         group: "SESSIONS",
         scope: Scope::Global,
         defaults: &["r"],
+    },
+    ActionSpec {
+        action: Action::EditNote,
+        id: "edit_note",
+        label: "Note",
+        hint: "Write your own note on the session under the cursor, shown on its card; an empty note removes it",
+        group: "SESSIONS",
+        scope: Scope::Global,
+        defaults: &["shift+n"],
     },
     ActionSpec {
         action: Action::Archive,

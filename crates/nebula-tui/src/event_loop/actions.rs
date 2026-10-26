@@ -528,6 +528,7 @@ pub(crate) fn menu_items_for_session(a: &nebula_core::Agent) -> Vec<MenuItem> {
             ),
             MenuItem::new("Duplicate", MenuAction::DuplicateAgent(a.id.clone())),
             MenuItem::new("Rename", MenuAction::RenameAgent(a.id.clone())),
+            MenuItem::new("Note…", MenuAction::EditAgentNote(a.id.clone())),
             MenuItem::new("Archive", MenuAction::ArchiveAgent(a.id.clone())),
             MenuItem::destructive("Delete", MenuAction::DeleteAgent(a.id.clone())),
         ];
@@ -549,6 +550,7 @@ pub(crate) fn menu_items_for_session(a: &nebula_core::Agent) -> Vec<MenuItem> {
             MenuItem::new("Duplicate", MenuAction::DuplicateAgent(a.id.clone())),
             MenuItem::new("Move to…", MenuAction::MoveAgentPicker(a.id.clone())),
             MenuItem::new("Rename", MenuAction::RenameAgent(a.id.clone())),
+            MenuItem::new("Note…", MenuAction::EditAgentNote(a.id.clone())),
             MenuItem::new("Archive", MenuAction::ArchiveAgent(a.id.clone())),
             MenuItem::destructive("Delete", MenuAction::DeleteAgent(a.id.clone())),
         ]

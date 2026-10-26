@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use nebula_core::clock::now_ms;
 use nebula_core::{
     Agent, AgentId, AgentKind, AgentStatus, Link, LinkId, PrSeen, Project, ProjectId, PromptEntry,
-    TerminalId, TerminalTab, Worktree, WorktreeId, RECENT_PROMPTS_KEPT,
+    TerminalId, TerminalTab, Worktree, WorktreeId, AGENT_NOTE_MAX_CHARS, RECENT_PROMPTS_KEPT,
 };
 use parking_lot::Mutex;
 use rusqlite::{params, Connection};
@@ -332,6 +332,11 @@ const MIGRATIONS: &[&str] = &[
     "
     ALTER TABLE agents ADD COLUMN role TEXT NOT NULL DEFAULT 'worker';
     ",
+    // 30: the user's own note on a session's card. Nullable: every
+    // existing session starts without one.
+    "
+    ALTER TABLE agents ADD COLUMN note TEXT;
+    ",
 ];
 
 pub struct Store {
@@ -601,6 +606,18 @@ impl Store {
         let changed = self.conn.lock().execute(
             "UPDATE agents SET name = ?2, auto_title_pending = 0 WHERE id = ?1 AND auto_title_pending = 1",
             params![id.as_str(), name],
+        )?;
+        Ok(changed == 1)
+    }
+
+    /// The user's note on the session's card: control characters become
+    /// spaces, whitespace collapses to one line, and the text is clipped
+    /// to [`AGENT_NOTE_MAX_CHARS`]; what is left empty removes the note.
+    /// Returns whether a row was there to take it.
+    pub fn set_agent_note(&self, id: &AgentId, raw: &str) -> Result<bool> {
+        let changed = self.conn.lock().execute(
+            "UPDATE agents SET note = ?2 WHERE id = ?1",
+            params![id.as_str(), sanitize_note(raw)],
         )?;
         Ok(changed == 1)
     }
@@ -1081,7 +1098,7 @@ const WORKTREE_COLUMNS: &str = "id, project_id, path, branch, is_main, sort_orde
 const AGENT_COLUMNS: &str = "id, worktree_id, name, status, archived, kind, \
                              claude_session_id, sort_order, status_changed_at, model, effort, \
                              archived_at, unseen, cloud_session_id, recent_prompts, custom_harness, \
-                             issue_url, role";
+                             issue_url, role, note";
 const TERMINAL_COLUMNS: &str = "id, worktree_id, name, sort_order, run_command";
 const LINK_COLUMNS: &str = "id, worktree_id, url, sort_order";
 
@@ -1132,7 +1149,23 @@ fn row_to_agent(r: &rusqlite::Row) -> rusqlite::Result<Agent> {
             .unwrap_or_default(),
         recent_prompts: parse_prompts(r.get::<_, Option<String>>(14)?.as_deref()),
         custom_harness: r.get(15)?,
+        note: r.get(18)?,
     })
+}
+
+/// A card note as stored: one line, no control characters, at most
+/// [`AGENT_NOTE_MAX_CHARS`] chars; None when nothing is left.
+fn sanitize_note(raw: &str) -> Option<String> {
+    let cleaned: String = raw
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    let mut note = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    if note.chars().count() > AGENT_NOTE_MAX_CHARS {
+        note = note.chars().take(AGENT_NOTE_MAX_CHARS).collect();
+        note.truncate(note.trim_end().len());
+    }
+    (!note.is_empty()).then_some(note)
 }
 
 /// A stored kind string back into its kind. Bare `"custom"` never parses
@@ -1230,6 +1263,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            note: None,
         };
         let pr_url = "https://github.com/AgentSystemLabs/nebula/pull/42";
         store
@@ -1255,6 +1289,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            note: None,
         };
         store.insert_agent(&codex_agent).unwrap();
         let cursor_agent = Agent {
@@ -1277,6 +1312,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            note: None,
         };
         store.insert_agent(&cursor_agent).unwrap();
         let issue_url = "https://github.com/AgentSystemLabs/nebula/issues/15";
@@ -1300,6 +1336,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            note: None,
         };
         store
             .insert_agent_with_launch_context(&issue_agent, true, None, Some(issue_url))
@@ -1343,6 +1380,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            note: None,
         };
         store.insert_agent(&custom).unwrap();
         let (_, _, reloaded, _) = store.load_tree().unwrap();
@@ -1849,6 +1887,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            note: None,
         };
 
         // Default-named session: pending until the agent titles it, and the
@@ -1938,6 +1977,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    note: None,
                 },
                 true,
             )
@@ -2068,6 +2108,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    note: None,
                 })
                 .unwrap();
         }
@@ -2133,6 +2174,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    note: None,
                 })
                 .unwrap();
         }
@@ -2195,6 +2237,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                note: None,
             };
             store.insert_agent(&agent).unwrap();
             agent.id
@@ -2296,6 +2339,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                note: None,
             })
             .unwrap();
         let entry = |n: usize| PromptEntry {
@@ -2361,5 +2405,102 @@ mod tests {
         assert!(!store
             .push_prompt(&AgentId("ghost".into()), &entry(1))
             .unwrap());
+    }
+
+    /// A store holding one fresh session, `a1`, for the card note tests.
+    fn store_with_one_agent() -> (Store, AgentId) {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .insert_project(&Project {
+                id: ProjectId("p1".into()),
+                name: "p".into(),
+                repo_path: "/tmp/p".into(),
+                sort_order: 0,
+            })
+            .unwrap();
+        store
+            .insert_worktree(&Worktree {
+                id: WorktreeId("w1".into()),
+                project_id: ProjectId("p1".into()),
+                path: "/tmp/p".into(),
+                branch: "main".into(),
+                is_main: true,
+                sort_order: 0,
+            })
+            .unwrap();
+        let id = AgentId("a1".into());
+        store
+            .insert_agent(&Agent {
+                id: id.clone(),
+                worktree_id: WorktreeId("w1".into()),
+                name: "agent-1".into(),
+                status: AgentStatus::Fresh,
+                archived: false,
+                archived_at: 0,
+                unseen: false,
+                kind: AgentKind::Claude,
+                custom_harness: None,
+                model: None,
+                effort: None,
+                session_id: None,
+                cloud_session_id: None,
+                sort_order: 0,
+                status_changed_at: 0,
+                alive: false,
+                issue_url: None,
+                role: nebula_core::AgentRole::Worker,
+                recent_prompts: Vec::new(),
+                note: None,
+            })
+            .unwrap();
+        (store, id)
+    }
+
+    #[test]
+    fn a_card_note_is_set_edited_and_cleared() {
+        let (store, id) = store_with_one_agent();
+        let note = |store: &Store| store.get_agent(&id).unwrap().unwrap().note;
+        assert_eq!(note(&store), None);
+
+        assert!(store
+            .set_agent_note(&id, "waiting on Sam's answer")
+            .unwrap());
+        assert_eq!(note(&store).as_deref(), Some("waiting on Sam's answer"));
+
+        assert!(store.set_agent_note(&id, "check the migration").unwrap());
+        assert_eq!(note(&store).as_deref(), Some("check the migration"));
+        // `load_tree` reads the same column through the same mapper.
+        let (_, _, agents, _) = store.load_tree().unwrap();
+        assert_eq!(agents[0].note.as_deref(), Some("check the migration"));
+
+        // An empty note — or one of blanks only — removes it.
+        assert!(store.set_agent_note(&id, "  \n\t ").unwrap());
+        assert_eq!(note(&store), None);
+
+        assert!(!store.set_agent_note(&AgentId("gone".into()), "x").unwrap());
+    }
+
+    /// The note is card text: one line, no control characters (an escape
+    /// sequence must never reach the terminal), and a bounded length.
+    #[test]
+    fn a_card_note_is_one_clean_line_capped_in_length() {
+        let (store, id) = store_with_one_agent();
+        let note = |store: &Store| store.get_agent(&id).unwrap().unwrap().note;
+
+        store
+            .set_agent_note(&id, "  ask\x1b[31m  about\nthe\r\nmigration ")
+            .unwrap();
+        assert_eq!(
+            note(&store).as_deref(),
+            Some("ask [31m about the migration")
+        );
+
+        let long = "é".repeat(AGENT_NOTE_MAX_CHARS + 50);
+        store.set_agent_note(&id, &long).unwrap();
+        assert_eq!(
+            note(&store).unwrap().chars().count(),
+            AGENT_NOTE_MAX_CHARS,
+            "clipped on a char boundary"
+        );
     }
 }

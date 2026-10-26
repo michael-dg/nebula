@@ -10,6 +10,15 @@ impl Daemon {
         Ok(())
     }
 
+    /// The user's note on the session's card; an empty one removes it.
+    pub fn set_agent_note(self: &Arc<Self>, id: &AgentId, note: &str) -> Result<()> {
+        if !self.store.set_agent_note(id, note)? {
+            bail!("agent not found");
+        }
+        self.broadcast_agent(id)?;
+        Ok(())
+    }
+
     /// Agent-initiated one-shot title (`nebula rename` inside the session's
     /// CLI). Applies only while the auto-title is still pending; afterwards
     /// it reports the standing title as an error so the CLI (and the model

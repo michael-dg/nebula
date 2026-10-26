@@ -1,0 +1,24 @@
+# Two launches in orbit-api, then ⇧N on the card `l` aims, a note typed and saved: the card shows it.
++
+orbit
+Enter
+F12
+p
+Move the token store from a JSON file to sqlite
+Enter
+F12
+p
+Profile the daemon's startup and find what takes 400ms
+Enter
+F12
+F12
+F12
+C-q
+Escape
+l
+F12
+N
+Waiting on Sam's review of the schema before merging
+Enter
+F12
+F12

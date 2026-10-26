@@ -2295,13 +2295,22 @@ fn draw_card(
         }
     }
 
+    // The user's own note, when there is one, on the first row under the
+    // head: one line on its `✎`, in its own yellow italic, so it never
+    // reads as the agent's words. The full note is in its editor (`⇧N`).
+    let mut lines = vec![first, second];
+    lines.resize(crate::launcher::CARD_HEAD_H as usize, Vec::new());
+    let note = a.note.as_deref().filter(|n| !n.is_empty());
+    if let Some(note) = note {
+        lines.push(note_line(note, width, quiet_or(th.warn)));
+    }
+
     // The last thing it was asked to do, on the prompt's own `›` (which
     // `hide_card_marks` leaves off), over the card's last rows rather than
     // clipped at the first.
-    let mut lines = vec![first, second];
-    lines.resize(crate::launcher::CARD_HEAD_H as usize, Vec::new());
     lines.extend(prompt_lines(
         crate::launcher::last_prompt(a).unwrap_or_default(),
+        crate::launcher::PROMPT_LINES - usize::from(note.is_some()),
         width,
         (!app.launcher.hide_card_marks).then(|| quiet_or(dim)),
         quiet_or(prompt),
@@ -2511,13 +2520,15 @@ fn draw_list_empty(f: &mut Frame, app: &mut App, area: Rect, what: &str) {
 
 /// The prompt block at the foot of a card: the `›` on its first row and
 /// the sentence wrapped under it, indented to the same column, over at
-/// most [`crate::launcher::PROMPT_LINES`] rows — so a card is a fixed
-/// height whatever it was asked to do. A prompt longer than that is cut
+/// most `keep` rows — [`crate::launcher::PROMPT_LINES`], one fewer under a
+/// note — so a card is a fixed height whatever it was asked to do and
+/// whatever it is noted with. A prompt longer than that is cut
 /// on the last of them with an ellipsis; an empty one draws nothing.
 /// `mark` is the `›`'s color, `None` (HIDE CARD MARKS) to leave it off
 /// and start every row in its column.
 fn prompt_lines(
     prompt: &str,
+    keep: usize,
     width: usize,
     mark: Option<Color>,
     text: Color,
@@ -2533,7 +2544,6 @@ fn prompt_lines(
         return Vec::new();
     }
     let wrapped = crate::pr_preview::wrap(prompt, body);
-    let keep = crate::launcher::PROMPT_LINES;
     let cut = wrapped.len() > keep;
     wrapped
         .into_iter()
@@ -2553,6 +2563,19 @@ fn prompt_lines(
             vec![lead, Span::styled(line_text, Style::default().fg(text))]
         })
         .collect()
+}
+
+/// A card's note row: the `✎` and the note, clipped with `…` to `width`.
+fn note_line(note: &str, width: usize, color: Color) -> Vec<Span<'static>> {
+    const MARK: &str = "✎ ";
+    let style = Style::default().fg(color);
+    vec![
+        Span::styled(MARK, style),
+        Span::styled(
+            truncate(note, width.saturating_sub(MARK.chars().count())),
+            style.add_modifier(Modifier::ITALIC),
+        ),
+    ]
 }
 
 /// The harness (and model) a session runs on, as the PANE's breadcrumb
@@ -3837,6 +3860,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                note: None,
             })
             .collect();
         app
@@ -4247,6 +4271,57 @@ mod tests {
             .position(|l| l.contains("s0"))
             .expect("the session's card");
         assert!(lines[row + 1].contains("claude"), "{:?}", lines[row + 1]);
+    }
+
+    /// The user's note sits on the first row under the card's head, on its
+    /// `✎`, and the last prompt moves down a row — the card keeps its
+    /// height. A card without a note opens its prompt on that row.
+    #[test]
+    fn a_card_with_a_note_shows_it_above_the_last_prompt() {
+        let mut app = a_tree();
+        select(&mut app, "api");
+        app.tree.agents[0].recent_prompts = vec![nebula_core::PromptEntry {
+            text: "fix the login redirect".into(),
+            submitted_at: 0,
+        }];
+        let body = Rect::new(0, 0, 100, 30);
+        let card_row = |lines: &[String]| {
+            lines
+                .iter()
+                .position(|l| l.contains("s0"))
+                .expect("the session's card")
+        };
+
+        let lines = drawn_lines(&mut app, body);
+        let row = card_row(&lines);
+        assert!(lines[row + 2].contains("› fix the login"), "{lines:#?}");
+        assert!(!lines.iter().any(|l| l.contains('✎')), "no note, no mark");
+
+        app.tree.agents[0].note = Some("waiting on Sam's answer".into());
+        let lines = drawn_lines(&mut app, body);
+        let row = card_row(&lines);
+        assert!(
+            lines[row + 2].contains("✎ waiting on Sam's answer"),
+            "{lines:#?}"
+        );
+        assert!(lines[row + 3].contains("› fix the login"), "{lines:#?}");
+    }
+
+    /// A note longer than the card is wide is clipped on its one row with
+    /// an ellipsis; the full note is in its editor.
+    #[test]
+    fn a_long_note_is_clipped_to_one_row_of_the_card() {
+        let mut app = a_tree();
+        select(&mut app, "api");
+        let note = "check the migration before merging ".repeat(8);
+        app.tree.agents[0].note = Some(note.trim().into());
+        let body = Rect::new(0, 0, 100, 30);
+
+        let lines = drawn_lines(&mut app, body);
+        let noted: Vec<_> = lines.iter().filter(|l| l.contains("migration")).collect();
+        assert_eq!(noted.len(), 1, "one row: {lines:#?}");
+        assert!(noted[0].contains("✎ check the migration"), "{noted:?}");
+        assert!(noted[0].contains('…'), "{noted:?}");
     }
 
     /// The `card_issue_number` setting puts an ISSUE SESSION's `#15` at
@@ -5055,6 +5130,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    note: None,
                 },
                 project: "nebula".into(),
                 branch: branch.into(),
@@ -5291,6 +5367,7 @@ mod tests {
             issue_url: None,
             role: nebula_core::AgentRole::Worker,
             recent_prompts: Vec::new(),
+            note: None,
         };
         let th = Theme::by_name("amber");
         let mut app = App::new();
@@ -5400,6 +5477,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                note: None,
             },
             project: "nebula".into(),
             branch: "feat-x".into(),
@@ -5456,6 +5534,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                note: None,
             },
             project: "nebula".into(),
             branch: "feat-x".into(),
@@ -5607,6 +5686,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    note: None,
                 },
                 project: "nebula".into(),
                 branch: "main".into(),
