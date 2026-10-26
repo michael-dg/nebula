@@ -1896,6 +1896,43 @@ mod tests {
         );
     }
 
+    /// A card note reaches every TUI as the row's upsert, already cleaned;
+    /// an unknown session is an error rather than a silent no-op.
+    #[test]
+    fn a_card_note_is_stored_and_sent_to_every_client() {
+        let daemon = test_daemon();
+        seed_projects(&daemon, &["p"]);
+        seed_worktree(&daemon, "p", "w", "/tmp", true);
+        seed_agent(&daemon, "a", "w", None);
+        let mut events = daemon.events.subscribe();
+        let id = AgentId("a".into());
+
+        daemon
+            .set_agent_note(&id, " check\tthe migration ")
+            .unwrap();
+        match events.try_recv() {
+            Ok(ServerEvent::EntityUpserted {
+                entity: Entity::Agent(a),
+            }) => {
+                assert_eq!(a.id, id);
+                assert_eq!(a.note.as_deref(), Some("check the migration"));
+            }
+            other => panic!("expected the row's upsert, got {other:?}"),
+        }
+
+        daemon.set_agent_note(&id, "").unwrap();
+        match events.try_recv() {
+            Ok(ServerEvent::EntityUpserted {
+                entity: Entity::Agent(a),
+            }) => assert_eq!(a.note, None),
+            other => panic!("expected the row's upsert, got {other:?}"),
+        }
+
+        assert!(daemon
+            .set_agent_note(&AgentId("ghost".into()), "x")
+            .is_err());
+    }
+
     /// A Cloud row never gets a local CLI booted in its name: the agent
     /// runs in the cloud sandbox, and the row's pane links there. Both
     /// paths that would otherwise fork a bare `claude` — a restart, and an
@@ -3114,6 +3151,7 @@ mod tests {
                 issue_url: None,
                 role: nebula_core::AgentRole::Worker,
                 recent_prompts: Vec::new(),
+                note: None,
             })
             .unwrap();
     }
@@ -3508,6 +3546,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    note: None,
                 },
                 true,
             )

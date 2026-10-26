@@ -329,6 +329,13 @@ impl ClientConnection {
                 reply_done(&self.out_tx, req_id, result).await;
                 Ok(true)
             }
+            ClientRequest::SetAgentNote { req_id, id, note } => {
+                let result = self
+                    .blocking_daemon(move |daemon| daemon.set_agent_note(&id, &note))
+                    .await;
+                reply_done(&self.out_tx, req_id, result).await;
+                Ok(true)
+            }
             ClientRequest::AutoRenameAgent { req_id, id, name } => {
                 let result = self
                     .blocking_daemon(move |daemon| daemon.auto_rename_agent(&id, &name))

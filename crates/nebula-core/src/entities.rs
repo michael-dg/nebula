@@ -275,7 +275,16 @@ pub struct Agent {
     /// the bottom. Empty for every row that predates the capture.
     #[serde(default)]
     pub recent_prompts: Vec<PromptEntry>,
+    /// The user's own note on the session's card (`⇧N` on the grid, or
+    /// the card's menu) — a reminder written by the user alone: no agent
+    /// command sets it and `/clear` leaves it. One line, at most
+    /// [`AGENT_NOTE_MAX_CHARS`]; None when the session has none.
+    #[serde(default)]
+    pub note: Option<String>,
 }
+
+/// Longest note a card keeps (in chars), past which the daemon clips it.
+pub const AGENT_NOTE_MAX_CHARS: usize = 280;
 
 impl Agent {
     /// Where this row's Claude Cloud session lives in the browser, when it

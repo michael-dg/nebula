@@ -921,6 +921,7 @@ fn acts_on_card(action: Action) -> bool {
     matches!(
         action,
         Action::Rename
+            | Action::EditNote
             | Action::Archive
             | Action::Unarchive
             | Action::Delete
@@ -1051,6 +1052,24 @@ pub(super) fn select_issue_card(app: &mut App, id: &AgentId, out: &mut Vec<Clien
             .map(|card| CardRef { band, card })
     });
     at.is_some_and(|at| select_card_row(app, at, out))
+}
+
+/// What `⇧N` says with no session card under the cursor to note.
+const NO_CARD_TO_NOTE: &str = "no session card selected — j/k onto one, then ⇧N writes its note";
+
+/// `⇧N` on the grid, and **Note…** in a card's menu: a box with the
+/// session's own note in it, written by the user alone and shown on the
+/// card. Enter saves it; an empty box removes it. A terminal has none.
+///
+/// INPUT PARITY: the menu row's `MenuAction::EditAgentNote` carries the
+/// id this reads off the cursor, and opens the same prompt.
+pub(super) fn edit_note(app: &mut App) {
+    let aimed = !(app.launcher_grid() && app.launcher.launcher_unaimed);
+    let Some(agent) = app.selected_session().filter(|_| aimed) else {
+        app.chrome.flash = Some(NO_CARD_TO_NOTE.into());
+        return;
+    };
+    super::open_prompt(app, PromptKind::AgentNote { id: agent.id });
 }
 
 /// What `⇧P` says with no card under the cursor to copy the settings of.
@@ -3127,6 +3146,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    note: None,
                 }),
             },
         );
@@ -3168,6 +3188,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    note: None,
                 }),
             },
         );
@@ -3221,6 +3242,7 @@ mod tests {
                     issue_url: None,
                     role: nebula_core::AgentRole::Worker,
                     recent_prompts: Vec::new(),
+                    note: None,
                 }),
             },
         );
@@ -8635,6 +8657,7 @@ mod tests {
                         issue_url: None,
                         role: nebula_core::AgentRole::Worker,
                         recent_prompts: Vec::new(),
+                        note: None,
                     }),
                 },
             );
@@ -9699,6 +9722,24 @@ mod tests {
                     assert_eq!(issue_url.as_deref(), Some(ISSUE_15));
                 }
                 other => panic!("one CreateAgent: {other:?}"),
+            }
+        });
+    }
+
+    /// `⇧N` on a card opens its note's box, on the grid as on the panel.
+    #[test]
+    fn shift_n_opens_the_cards_note() {
+        with_default_config(|| {
+            let mut app = card_with_settings();
+            let card = app.selected_session().expect("a card under the cursor");
+            key(&mut app, KeyCode::Char('N'), KeyModifiers::SHIFT);
+            match &app.modals.overlay {
+                Some(Overlay::Prompt(p)) => assert!(
+                    matches!(&p.kind, PromptKind::AgentNote { id } if id == &card.id),
+                    "{:?}",
+                    p.kind
+                ),
+                other => panic!("the note's box: {other:?} / {:?}", app.chrome.flash),
             }
         });
     }

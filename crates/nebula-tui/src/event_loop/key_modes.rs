@@ -643,6 +643,7 @@ fn handle_tool_action(app: &mut App, action: crate::keymap::Action, out: &mut Ve
         Action::OpenIssue => launcher::open_issue(app, out),
         Action::DuplicateSession => launcher::duplicate_session(app),
         Action::MoveSession => launcher::move_session(app),
+        Action::EditNote => launcher::edit_note(app),
         Action::OpenGhosttyTab => open_ghostty_tab(app),
         // Shift+Enter / Shift+O: the selected worktree's OPEN COMMAND, from
         // any panel — the cursor's worktree is the context wherever the

@@ -119,6 +119,20 @@ pub(crate) fn open_prompt(app: &mut App, kind: PromptKind) {
                 .unwrap_or_default();
             ("Rename agent".into(), "name".into(), current)
         }
+        PromptKind::AgentNote { id } => {
+            let current = app
+                .tree
+                .agents
+                .iter()
+                .find(|a| &a.id == id)
+                .and_then(|a| a.note.clone())
+                .unwrap_or_default();
+            (
+                "Note".into(),
+                "your own, shown on the card — empty removes it".into(),
+                current,
+            )
+        }
         PromptKind::RenameTerminal { id } => {
             let current = app
                 .tree

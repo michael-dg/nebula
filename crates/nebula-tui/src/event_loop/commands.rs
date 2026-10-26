@@ -95,6 +95,7 @@ fn prompt_value_or_cancel(app: &mut App, prompt: PromptDialog) -> Option<(Prompt
     // For every other prompt an empty field is a cancel.
     let empty_is_a_default = match &prompt.kind {
         PromptKind::NewWorktree { .. }
+        | PromptKind::AgentNote { .. }
         | PromptKind::RenameProject { .. }
         | PromptKind::SettingText { .. }
         | PromptKind::AgentPresetTask { .. } => true,
@@ -260,6 +261,7 @@ fn dispatch_prompt(
             }
         }
         PromptKind::RenameAgent { id } => optimistic::rename_agent(app, id, value, out),
+        PromptKind::AgentNote { id } => optimistic::set_agent_note(app, id, value, out),
         PromptKind::RenameTerminal { id } => optimistic::rename_terminal(app, id, value, out),
         PromptKind::RenameProject { id } => optimistic::rename_project(app, id, value, out),
         PromptKind::SettingText { kind, project } => {
@@ -564,6 +566,7 @@ pub(crate) fn run_menu_action(app: &mut App, action: MenuAction, out: &mut Vec<C
         MenuAction::MoveAgentPicker(id) => launcher::open_move_picker(app, id),
         MenuAction::MoveAgent { id, worktree } => launcher::move_agent(app, id, worktree, out),
         MenuAction::RenameAgent(id) => open_prompt(app, PromptKind::RenameAgent { id }),
+        MenuAction::EditAgentNote(id) => open_prompt(app, PromptKind::AgentNote { id }),
         MenuAction::ArchiveAgent(id) => {
             archive_agent(app, id, out);
         }

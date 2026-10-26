@@ -210,6 +210,21 @@ relocation reopens on, are left out, and so are blank ones. A click on the line 
 archived cards show none, and a session created before the feature simply has nothing to show until
 its next prompt.
 
+## CARD NOTES
+
+A session card can carry a NOTE of your own: a reminder to yourself such as "waiting on Sam's answer"
+or "check the migration before merging". `Shift+N` on a card (or **Note…** in its right-click menu)
+opens a box with the note the session has; `Enter` saves it, and saving it empty removes it.
+
+The card shows the note on the first row under its name and harness, in yellow italics behind a `✎`,
+clipped to the card with `…`. The last prompt moves down a row to make room, so the card keeps its
+height. The full note is in the box.
+
+The DAEMON keeps the note on the session's row, so it survives restarts and every connected TUI shows
+it. It is stored as one line: control characters become spaces, whitespace collapses, and anything past
+280 characters is cut. The note is yours alone. Nothing the agent can run writes it, `/clear` leaves it,
+and a duplicated session starts without one.
+
 ## The GRID
 
 nebula opens on a GRID of session cards — no modal over it, ever, on any launch. Starting a session
